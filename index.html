@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Product List Generator</title>
+
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- jsPDF & jsPDF-AutoTable (Local with CDN fallback) -->
+  <script src="lib/jspdf.umd.min.js"></script>
+  <script src="lib/jspdf.plugin.autotable.min.js"></script>
+  <script>
+    if (!window.jspdf && !window.jsPDF) {
+      document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"><\\/script>');
+      document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"><\\/script>');
+    }
+  </script>
+
+  <!-- Main Stylesheet -->
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- SIDEBAR -->
+    <aside id="sidebar" class="sidebar">
+      <!-- App Brand -->
+      <div class="sidebar-header">
+        <div class="app-logo">
+          <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"></path>
+            <path d="M6 6h10"></path>
+            <path d="M6 10h10"></path>
+            <path d="M6 14h6"></path>
+          </svg>
+          <div class="logo-text">
+            <span class="logo-title">Product List</span>
+            <span class="logo-subtitle">Generator</span>
+          </div>
+        </div>
+        <div class="sidebar-gold-line"></div>
+      </div>
+
+      <!-- Company Switcher -->
+      <div class="company-switcher-section">
+        <span class="company-switcher-label">Active Workspace</span>
+        <div class="company-switcher-buttons">
+          <button type="button" id="company-1-btn" class="company-btn active" data-company="1">
+            <span class="company-btn-badge">1</span>
+            <span>Company 1</span>
+          </button>
+          <button type="button" id="company-2-btn" class="company-btn" data-company="2">
+            <span class="company-btn-badge">2</span>
+            <span>Company 2</span>
+          </button>
+        </div>
+        <div class="company-indicator-wrapper">
+          <span class="company-status-dot"></span>
+          <span id="company-indicator">Company 1</span>
+        </div>
+      </div>
+
+      <!-- Navigation Links -->
+      <nav class="sidebar-nav">
+        <button type="button" class="nav-btn active" data-view="products">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+            <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+          </svg>
+          <span>Products</span>
+        </button>
+
+        <button type="button" class="nav-btn" data-view="lists">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="8" y1="6" x2="21" y2="6"></line>
+            <line x1="8" y1="12" x2="21" y2="12"></line>
+            <line x1="8" y1="18" x2="21" y2="18"></line>
+            <line x1="3" y1="6" x2="3.01" y2="6"></line>
+            <line x1="3" y1="12" x2="3.01" y2="12"></line>
+            <line x1="3" y1="18" x2="3.01" y2="18"></line>
+          </svg>
+          <span>Saved Lists</span>
+        </button>
+
+        <button type="button" class="nav-btn" data-view="pdf">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="16" y1="13" x2="8" y2="13"></line>
+            <line x1="16" y1="17" x2="8" y2="17"></line>
+            <polyline points="10 9 9 9 8 9"></polyline>
+          </svg>
+          <span>PDF Generator</span>
+        </button>
+
+        <button type="button" class="nav-btn" data-view="settings">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+          <span>Settings</span>
+        </button>
+
+        <button type="button" class="nav-btn" data-view="backup">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+            <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+            <line x1="12" y1="22.08" x2="12" y2="12"></line>
+          </svg>
+          <span>Backup &amp; Restore</span>
+        </button>
+      </nav>
+
+      <!-- Sidebar Footer Info -->
+      <div class="sidebar-footer">
+        <span class="sidebar-version">v1.0 &bull; Local Storage</span>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main id="main-content">
+
+      <!-- Mobile sidebar toggle -->
+      <button type="button" id="sidebar-toggle" class="sidebar-toggle" aria-label="Toggle menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </button>
+
+      <!-- VIEW: Products -->
+      <section id="view-products" class="view active">
+        <div class="view-header">
+          <div class="view-header-title">
+            <h1>Products</h1>
+            <p class="view-subtitle">Manage inventory and specifications for current company</p>
+          </div>
+          <div class="view-actions">
+            <div class="search-box">
+              <svg class="search-box-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+              <input type="search" id="product-search-input" placeholder="Search products..." autocomplete="off">
+            </div>
+            <button type="button" id="btn-add-product" class="btn btn-primary">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              <span>Add Product</span>
+            </button>
+          </div>
+        </div>
+
+        <div id="products-grid" class="cards-grid"></div>
+
+        <div id="products-empty-state" class="empty-state">
+          <div class="empty-state-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+              <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+            </svg>
+          </div>
+          <h3 class="empty-state-title">No products found</h3>
+          <p class="empty-state-description">No products yet. Add your first product to get started.</p>
+          <button type="button" class="btn btn-primary" onclick="document.getElementById('btn-add-product').click()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            <span>+ Add Product</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- VIEW: Saved Lists -->
+      <section id="view-lists" class="view">
+        <div class="view-header">
+          <div class="view-header-title">
+            <h1>Saved Lists</h1>
+            <p class="view-subtitle">Organize and curate custom collections for client catalogs</p>
+          </div>
+          <div class="view-actions">
+            <button type="button" id="btn-create-list" class="btn btn-primary">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              <span>Create List</span>
+            </button>
+          </div>
+        </div>
+
+        <div id="lists-grid" class="cards-grid"></div>
+
+        <div id="lists-empty-state" class="empty-state">
+          <div class="empty-state-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+            </svg>
+          </div>
+          <h3 class="empty-state-title">No saved lists</h3>
+          <p class="empty-state-description">No saved lists yet.</p>
+          <button type="button" class="btn btn-primary" onclick="document.getElementById('btn-create-list').click()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            <span>+ Create List</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- VIEW: PDF Generator -->
+      <section id="view-pdf" class="view">
+        <div class="view-header">
+          <div class="view-header-title">
+            <h1>PDF Generator</h1>
+            <p class="view-subtitle">Export publication-ready product catalogs with branding</p>
+          </div>
+        </div>
+
+        <div id="pdf-content">
+          <!-- Selection & Configuration Panel -->
+          <div class="pdf-config-card">
+            <!-- Source selection tabs -->
+            <div class="pdf-source-section">
+              <label class="form-label">Catalog Source</label>
+              <div class="pdf-tabs">
+                <button type="button" id="pdf-tab-list" class="pdf-tab-btn active">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="8" y1="6" x2="21" y2="6"></line>
+                    <line x1="8" y1="12" x2="21" y2="12"></line>
+                    <line x1="8" y1="18" x2="21" y2="18"></line>
+                  </svg>
+                  <span>From Saved List</span>
+                </button>
+                <button type="button" id="pdf-tab-manual" class="pdf-tab-btn">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="9 11 12 14 22 4"></polyline>
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                  </svg>
+                  <span>Select Products</span>
+                </button>
+              </div>
+
+              <!-- List source dropdown -->
+              <div id="pdf-list-section" class="pdf-source-body">
+                <div class="form-group mb-0">
+                  <label for="pdf-list-select" class="form-label">Select Saved List</label>
+                  <select id="pdf-list-select" class="form-input form-select">
+                    <option value="">Select a saved list...</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Manual product selector grid -->
+              <div id="pdf-manual-section" class="pdf-source-body hidden">
+                <div class="manual-section-header">
+                  <span class="manual-section-hint">Choose products to feature in the generated catalog:</span>
+                </div>
+                <div id="pdf-manual-grid" class="cards-grid manual-selection-grid"></div>
+              </div>
+            </div>
+
+            <!-- PDF Options Section -->
+            <div class="pdf-options">
+              <label class="toggle-container">
+                <input type="checkbox" id="pdf-include-prices" checked>
+                <span class="toggle-slider"></span>
+                <span class="toggle-label">Include Prices</span>
+              </label>
+            </div>
+
+            <!-- Action & Selected Count Bar -->
+            <div class="pdf-generate-bar">
+              <div id="pdf-selected-count" class="selected-badge">0 products selected</div>
+              <button type="button" id="btn-generate-pdf" class="btn btn-primary btn-large">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                </svg>
+                <span>Generate PDF Preview</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- PDF Preview Section (Hidden Initially) -->
+          <div id="pdf-preview-section" class="pdf-preview-panel hidden">
+            <div class="pdf-preview-header">
+              <div class="pdf-preview-title-group">
+                <h2>Catalog Preview</h2>
+                <span class="preview-badge">Live Render</span>
+              </div>
+              <div class="pdf-preview-actions">
+                <button type="button" id="btn-download-pdf" class="btn btn-primary">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                  </svg>
+                  <span>Download PDF</span>
+                </button>
+                <button type="button" id="btn-close-preview" class="btn-icon" aria-label="Close Preview" title="Close Preview">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div class="iframe-container">
+              <iframe id="pdf-preview-iframe" title="PDF Catalog Preview"></iframe>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW: Settings -->
+      <section id="view-settings" class="view">
+        <div class="view-header">
+          <div class="view-header-title">
+            <h1>Company Settings</h1>
+            <p class="view-subtitle">Configure branding and profile attributes for current company</p>
+          </div>
+        </div>
+
+        <div class="settings-form">
+          <!-- Company Name Group -->
+          <div class="settings-group">
+            <label for="settings-company-name" class="form-label">Company Name (English)</label>
+            <input type="text" id="settings-company-name" class="form-input" placeholder="e.g. Acme Corporation" autocomplete="off">
+            <span class="field-hint">This name appears prominently on catalog headers and documentation.</span>
+          </div>
+
+          <!-- Arabic Company Name Group -->
+          <div class="settings-group">
+            <label for="settings-company-name-ar" class="form-label">Arabic Company Name (اسم الشركة بالعربية)</label>
+            <input type="text" id="settings-company-name-ar" class="form-input" placeholder="مثال: أوزوريس للتجهيزات الإيطالية" dir="rtl" autocomplete="off">
+            <span class="field-hint">يظهر بجانب الاسم الإنجليزي في رأس صفحة الكتالوج (Header).</span>
+          </div>
+
+          <!-- Phone Number Group -->
+          <div class="settings-group">
+            <label for="settings-company-phone" class="form-label">Phone Number (رقم الهاتف)</label>
+            <input type="text" id="settings-company-phone" class="form-input" placeholder="e.g. +39 02 8900 1200 or 01012345678" autocomplete="off">
+            <span class="field-hint">Printed on the bottom footer of catalog pages.</span>
+          </div>
+
+          <!-- Email Address Group -->
+          <div class="settings-group">
+            <label for="settings-company-email" class="form-label">Email Address (البريد الإلكتروني)</label>
+            <input type="email" id="settings-company-email" class="form-input" placeholder="e.g. info@company.com" autocomplete="off">
+            <span class="field-hint">Printed on the bottom footer of catalog pages.</span>
+          </div>
+
+          <!-- Address / Cities Group -->
+          <div class="settings-group">
+            <label for="settings-company-address" class="form-label">Address / Location (العنوان أو المدن)</label>
+            <input type="text" id="settings-company-address" class="form-input" placeholder="e.g. MILANO • RIYADH or القاهرة، مصر" autocomplete="off">
+            <span class="field-hint">Printed on the bottom left footer of catalog pages.</span>
+          </div>
+
+          <!-- Company Logo Group -->
+          <div class="settings-group">
+            <label class="form-label">Company Logo</label>
+            <div class="logo-upload-area">
+              <div id="settings-logo-preview" class="logo-preview-box">
+                <span class="logo-empty-text">No Logo</span>
+              </div>
+              <div class="logo-upload-controls">
+                <input type="file" id="settings-logo-input" accept="image/*" class="visually-hidden">
+                <div class="logo-action-buttons">
+                  <button type="button" id="btn-upload-logo" class="btn btn-secondary">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                      <polyline points="17 8 12 3 7 8"></polyline>
+                      <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                    <span>Upload Logo</span>
+                  </button>
+                  <button type="button" id="btn-remove-logo" class="btn btn-text-danger hidden">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="3 6 5 6 21 6"></polyline>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                    <span>Remove Logo</span>
+                  </button>
+                </div>
+                <p class="field-hint">Recommended: High resolution square or landscape PNG with transparent background.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Auto-save status -->
+          <div class="settings-footer-status">
+            <span id="settings-save-status" class="save-indicator">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+              <span>Changes saved automatically</span>
+            </span>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW: Backup & Restore -->
+      <section id="view-backup" class="view">
+        <div class="view-header">
+          <div class="view-header-title">
+            <h1>Backup &amp; Restore</h1>
+            <p class="view-subtitle">Secure and migrate your full catalog database with one click</p>
+          </div>
+        </div>
+
+        <div class="backup-cards">
+          <!-- Export Card -->
+          <div class="backup-card">
+            <div class="backup-card-icon export-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+            </div>
+            <h3>Export Backup</h3>
+            <p>Download all company data, products, images, saved lists, and settings as a single backup file.</p>
+            <div class="backup-card-action">
+              <button type="button" id="btn-export-backup" class="btn btn-primary">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="7 10 12 15 17 10"></polyline>
+                  <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                <span>Export All Data</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Import Card -->
+          <div class="backup-card">
+            <div class="backup-card-icon import-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+              </svg>
+            </div>
+            <h3>Import Backup</h3>
+            <p>Restore data from a previously exported backup file. This will replace all current data.</p>
+            <div class="backup-card-action">
+              <input type="file" id="backup-file-input" accept=".json" class="visually-hidden">
+              <button type="button" id="btn-import-backup" class="btn btn-secondary">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="17 8 12 3 7 8"></polyline>
+                  <line x1="12" y1="3" x2="12" y2="15"></line>
+                </svg>
+                <span>Import Backup File</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- MODALS OVERLAY -->
+  <div id="modal-overlay" class="modal-overlay hidden" style="display:none;">
+
+    <!-- Modal 1: Product Add / Edit -->
+    <div id="modal-product" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-product-title">
+      <div class="modal-header">
+        <h2 id="modal-product-title">Add Product</h2>
+        <button type="button" class="modal-close" aria-label="Close modal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+
+      <form id="product-form">
+        <div class="modal-body">
+          <input type="hidden" id="input-product-id">
+
+          <!-- Product Name -->
+          <div class="form-group">
+            <label for="input-product-name" class="form-label">Product Name *</label>
+            <input type="text" id="input-product-name" class="form-input" placeholder="e.g. Royal Porcelain Mug" required autocomplete="off">
+          </div>
+
+          <!-- Product Image Dropzone -->
+          <div class="form-group">
+            <label class="form-label">Product Image *</label>
+            <div id="product-image-dropzone" class="image-dropzone">
+              <div class="dropzone-content">
+                <svg class="dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                  <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                  <polyline points="21 15 16 10 5 21"></polyline>
+                </svg>
+                <span class="dropzone-text">Drop image here or click to upload</span>
+                <span class="dropzone-subtext">Automatic square cropping &amp; optimization</span>
+              </div>
+              <input type="file" id="input-product-image" accept="image/*" class="visually-hidden">
+              <img id="product-image-preview" class="image-preview hidden" alt="Product preview">
+            </div>
+          </div>
+
+          <!-- Pieces & Price Row -->
+          <div class="form-row">
+            <div class="form-group">
+              <label for="input-product-pieces" class="form-label">Pieces per Carton *</label>
+              <input type="number" id="input-product-pieces" class="form-input" min="1" placeholder="24" required>
+            </div>
+            <div class="form-group">
+              <label for="input-product-price" class="form-label">Carton Price</label>
+              <div class="input-with-symbol">
+                <span class="input-symbol">$</span>
+                <input type="number" id="input-product-price" class="form-input has-symbol" min="0" step="0.01" placeholder="0.00">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" id="btn-cancel-product-modal" class="btn btn-secondary">Cancel</button>
+          <button type="submit" id="btn-save-product" class="btn btn-primary">Save Product</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Modal 2: List Name Step -->
+    <div id="modal-list-name" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-list-title">
+      <div class="modal-header">
+        <h2 id="modal-list-title">Create List</h2>
+        <button type="button" class="modal-close" aria-label="Close modal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <input type="hidden" id="input-list-id">
+        <div class="form-group mb-0">
+          <label for="input-list-name" class="form-label">List Name</label>
+          <input type="text" id="input-list-name" class="form-input" placeholder="e.g. Summer 2026 Collection" required autocomplete="off">
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" id="btn-cancel-list-modal" class="btn btn-secondary">Cancel</button>
+        <button type="button" id="btn-next-list-step" class="btn btn-primary">Next: Select Products</button>
+      </div>
+    </div>
+
+    <!-- Modal 3: List Product Selection -->
+    <div id="modal-list-select" class="modal modal-large" role="dialog" aria-modal="true" aria-labelledby="modal-list-select-title">
+      <div class="modal-header">
+        <div class="modal-header-info">
+          <h2 id="modal-list-select-title">Select Products</h2>
+          <span class="modal-subtitle">Pick the items to include in this list</span>
+        </div>
+        <button type="button" class="modal-close" aria-label="Close modal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <div class="modal-search">
+          <div class="search-box">
+            <svg class="search-box-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input type="search" id="list-product-search" class="form-input" placeholder="Search products in this list..." autocomplete="off">
+          </div>
+        </div>
+
+        <div id="list-select-grid" class="cards-grid modal-selection-grid"></div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" id="btn-cancel-list-selection" class="btn btn-secondary">Cancel</button>
+        <button type="button" id="btn-save-list-selection" class="btn btn-primary">Save List</button>
+      </div>
+    </div>
+
+    <!-- Modal 4: Confirmation Dialog -->
+    <div id="modal-confirm" class="modal modal-small" role="dialog" aria-modal="true">
+      <div class="modal-body confirm-body">
+        <div id="confirm-icon" class="confirm-icon-badge">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+            <line x1="12" y1="9" x2="12" y2="13"></line>
+            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+          </svg>
+        </div>
+        <h3 id="confirm-title" class="confirm-title">Are you sure?</h3>
+        <p id="confirm-message" class="confirm-message">This action cannot be undone.</p>
+      </div>
+
+      <div class="modal-footer confirm-footer">
+        <button type="button" id="btn-confirm-no" class="btn btn-secondary">Cancel</button>
+        <button type="button" id="btn-confirm-yes" class="btn btn-danger">Delete</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- TOAST NOTIFICATION CONTAINER -->
+  <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- FULL SCREEN LOADING OVERLAY -->
+  <div id="loading-overlay" class="loading-overlay hidden" style="display:none;"
+    <div class="loading-box">
+      <div class="loading-spinner"></div>
+      <p class="loading-message">Processing, please wait...</p>
+    </div>
+  </div>
+
+  <!-- APPLICATION SCRIPTS -->
+  <script src="js/db.js"></script>
+  <script src="js/imageUtils.js"></script>
+  <script src="js/products.js"></script>
+  <script src="js/lists.js"></script>
+  <script src="js/pdf.js"></script>
+  <script src="js/settings.js"></script>
+  <script src="js/backup.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
