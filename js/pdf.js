@@ -62,14 +62,14 @@
    * Renders cursive, perfectly connected Arabic text using the browser's native text engine
    * at 4x resolution (300+ DPI print quality) to guarantee zero disconnected letters.
    */
-  function drawArabicCanvasText(doc, text, x, y, maxW, fontSizePt, colorRgb, align = 'right') {
+  function drawArabicCanvasText(doc, text, x, y, maxW, fontSizePt, colorRgb, align = 'right', weight = 'bold') {
     if (!text) return;
     if (typeof document !== 'undefined' && document.createElement) {
       const scale = 4;
       const canvas = document.createElement('canvas');
       const ptToPx = 1.333333;
       const fontSizePx = fontSizePt * ptToPx * scale;
-      const fontStr = `bold ${fontSizePx}px "Amiri", "Cairo", "Noto Sans Arabic", "Segoe UI", "Tahoma", sans-serif`;
+      const fontStr = `${weight} ${fontSizePx}px "Amiri", "Cairo", "Noto Sans Arabic", "Segoe UI", "Tahoma", sans-serif`;
 
       const ctx = canvas.getContext('2d');
       ctx.font = fontStr;
@@ -106,7 +106,7 @@
 
       doc.addImage(imgData, 'PNG', finalX, finalY, finalW, finalH);
     } else if (doc.processArabic) {
-      doc.setFont('Amiri', 'normal');
+      doc.setFont('Amiri', weight === 'bold' ? 'bold' : 'normal');
       doc.setFontSize(fontSizePt);
       doc.setTextColor(colorRgb[0], colorRgb[1], colorRgb[2]);
       doc.text(doc.processArabic(text), x, y, { align: align });
@@ -494,8 +494,8 @@
         const tagline = settings.tagline || (companyId === 1 ? 'CORPORATE PRODUCT SELECTION • EXECUTIVE SPECIFICATION' : 'ARCHITECTURAL LIVING COLLECTION • LUXURY SPECIFICATION');
         const refCode = settings.ref || (companyId === 1 ? 'REF #OS-884' : 'REF #AL-920');
 
-        // Arabic font loading check
-        const needsArabic = products.some((p) => isArabic(p.name)) || isArabic(companyName) || isArabic(companyNameAr) || isArabic(address);
+        // Arabic font loading check (always loaded since packaging and prices are in Arabic)
+        const needsArabic = true;
         let arabicLoaded = false;
         if (needsArabic) {
           arabicLoaded = await loadArabicFont(doc);
@@ -687,43 +687,23 @@
             doc.setLineWidth(0.25);
             doc.roundedRect(cellX, cellY, colWidth, rowHeight, 2, 2, 'FD');
 
-            // Card Top Bar (SPECIMEN UNIT on left, Gold Pill on right)
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(5);
-            doc.setTextColor(COLORS.GRAY[0], COLORS.GRAY[1], COLORS.GRAY[2]);
-            doc.text('SPECIMEN UNIT', cellX + 4, cellY + 4.5);
-
-            // Pill Badge: N° 01 / N° 02 in Champagne Gold
-            const pillW = 11;
-            const pillH = 3.8;
-            const pillX = cellX + colWidth - 4 - pillW;
-            const pillY = cellY + 1.8;
-            doc.setDrawColor(COLORS.GOLD[0], COLORS.GOLD[1], COLORS.GOLD[2]);
-            doc.setLineWidth(0.25);
-            doc.setFillColor(255, 255, 255);
-            doc.roundedRect(pillX, pillY, pillW, pillH, 0.8, 0.8, 'FD');
-
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(5.2);
-            doc.setTextColor(COLORS.GOLD[0], COLORS.GOLD[1], COLORS.GOLD[2]);
-            doc.text(`N° ${String(productGlobalIndex + 1).padStart(2, '0')}`, pillX + pillW / 2, pillY + 2.7, { align: 'center' });
-
-            // Product Image Container
-            const imgBoxX = cellX + 3.5;
-            const imgBoxY = cellY + 6.2;
-            const imgBoxW = colWidth - 7;
+            // Product Image Container - Fills the majority of the card
+            const imgBoxX = cellX + 1.8;
+            const imgBoxY = cellY + 1.8;
+            const imgBoxW = colWidth - 3.6; // 82.4mm wide
+            const imgBoxHeight = 37.2; // 37.2mm high (covers ~64% of card)
 
             doc.setFillColor(255, 255, 255);
             doc.setDrawColor(COLORS.HAIRLINE[0], COLORS.HAIRLINE[1], COLORS.HAIRLINE[2]);
-            doc.setLineWidth(0.2);
+            doc.setLineWidth(0.15);
             doc.roundedRect(imgBoxX, imgBoxY, imgBoxW, imgBoxHeight, 1.2, 1.2, 'FD');
 
-            // Centered Product Image
+            // Centered Product Image - Maximized to fill the container cleanly
             const imgSrc = product.image || product.thumbnail;
             if (imgSrc) {
               try {
-                const maxW = imgBoxW - 4;
-                const maxH = imgBoxHeight - 4;
+                const maxW = imgBoxW - 1.2;
+                const maxH = imgBoxHeight - 1.2;
                 const dims = imageDimensionsMap.get(product.id) || { width: 1, height: 1 };
                 const ratio = dims.width / dims.height;
                 let drawW = maxW;
@@ -749,91 +729,81 @@
               doc.text('NO IMAGE AVAILABLE', imgBoxX + imgBoxW / 2, imgBoxY + imgBoxHeight / 2 + 1.2, { align: 'center' });
             }
 
-            // Dark Certification Badge (Bottom Right of Image Box)
-            const badgeW = 16;
-            const badgeH = 3.5;
-            const badgeX = imgBoxX + imgBoxW - badgeW - 1.5;
-            const badgeY = imgBoxY + imgBoxHeight - badgeH - 1.5;
-            doc.setFillColor(COLORS.NAVY[0], COLORS.NAVY[1], COLORS.NAVY[2]);
-            doc.roundedRect(badgeX, badgeY, badgeW, badgeH, 0.6, 0.6, 'F');
+            // Discreet Corner Badge: N° 01 in Champagne Gold
+            const pillW = 9.5;
+            const pillH = 3.6;
+            const pillX = cellX + colWidth - 2.5 - pillW;
+            const pillY = cellY + 2.5;
+            doc.setDrawColor(COLORS.GOLD[0], COLORS.GOLD[1], COLORS.GOLD[2]);
+            doc.setLineWidth(0.2);
+            doc.setFillColor(255, 255, 255);
+            doc.roundedRect(pillX, pillY, pillW, pillH, 0.8, 0.8, 'FD');
+
             doc.setFont('helvetica', 'bold');
-            doc.setFontSize(4.2);
-            doc.setTextColor(255, 255, 255);
-            const certText = (productGlobalIndex % 2 === 0) ? 'CERT. ISO 9001' : 'CERT. EN-1112';
-            doc.text(certText, badgeX + badgeW / 2, badgeY + 2.3, { align: 'center' });
+            doc.setFontSize(5);
+            doc.setTextColor(COLORS.GOLD[0], COLORS.GOLD[1], COLORS.GOLD[2]);
+            doc.text(`N° ${String(productGlobalIndex + 1).padStart(2, '0')}`, pillX + pillW / 2, pillY + 2.5, { align: 'center' });
 
             // ==========================================
-            // Title & Identity Block (Below Image)
+            // Title & Identity Block (Below Image - Centered & Refined)
             // ==========================================
-            const nameY = cellY + 41.5;
-            const prodName = product.name || 'Unnamed Product';
+            const nameY = cellY + 42.8;
+            const prodName = product.name || 'منتج بدون اسم';
             const nameIsArabic = isArabic(prodName);
+            const centerX = cellX + colWidth / 2;
 
             if (nameIsArabic) {
-              drawArabicCanvasText(doc, prodName, cellX + colWidth - 4, nameY, colWidth - 8, 8, COLORS.NAVY, 'right');
+              drawArabicCanvasText(doc, prodName, centerX, nameY, colWidth - 5, 8.5, COLORS.NAVY, 'center', 'bold');
             } else {
               doc.setFont('times', 'bold');
-              doc.setFontSize(8);
+              doc.setFontSize(8.5);
               doc.setTextColor(COLORS.NAVY[0], COLORS.NAVY[1], COLORS.NAVY[2]);
-              doc.text(prodName, cellX + 4, nameY, { maxWidth: colWidth - 8 });
+              doc.text(prodName, centerX, nameY, { align: 'center', maxWidth: colWidth - 5 });
             }
 
             // ==========================================
-            // Bottom Specification Table (NO Material, NO Flow Rate!)
-            // With prices -> PACKAGING + PRICE
-            // Without prices -> PACKAGING only
+            // Bottom Specification Section (Arabic Packaging & EGP Price)
             // ==========================================
-            const tableDividerY = cellY + rowHeight - 11;
+            const tableDividerY = cellY + 47.8;
             doc.setDrawColor(COLORS.HAIRLINE[0], COLORS.HAIRLINE[1], COLORS.HAIRLINE[2]);
             doc.setLineWidth(0.2);
-            doc.line(cellX + 4, tableDividerY, cellX + colWidth - 4, tableDividerY);
+            doc.line(cellX + 3, tableDividerY, cellX + colWidth - 3, tableDividerY);
 
-            const labelY = tableDividerY + 3.2;
-            const valY = tableDividerY + 7.2;
             const pcsVal = (product.piecesPerCarton != null && product.piecesPerCarton !== '') ? product.piecesPerCarton : 1;
 
             if (includePrices) {
-              // 2 Columns: PACKAGING and CARTON PRICE
-              const col1X = cellX + 4;
-              const col2X = cellX + 46;
+              // Subtle vertical separator between Packaging (right) and Price (left)
+              const midX = cellX + colWidth / 2;
+              doc.line(midX, tableDividerY + 1.5, midX, cellY + rowHeight - 2);
 
-              // Column 1: Packaging
-              doc.setFont('helvetica', 'bold');
-              doc.setFontSize(4.5);
-              doc.setTextColor(COLORS.GRAY[0], COLORS.GRAY[1], COLORS.GRAY[2]);
-              doc.text('PACKAGING', col1X, labelY);
+              // Right Column: التعبئة (Packaging)
+              const rightColCenter = cellX + (colWidth * 0.75);
+              drawArabicCanvasText(doc, 'التعبئة', rightColCenter, tableDividerY + 3.2, 36, 4.8, COLORS.GRAY, 'center', 'normal');
+              drawArabicCanvasText(doc, `${pcsVal} قطعة / كرتونة`, rightColCenter, tableDividerY + 7.2, 38, 6.2, COLORS.NAVY, 'center', 'bold');
 
-              doc.setFont('helvetica', 'bold');
-              doc.setFontSize(6.5);
-              doc.setTextColor(COLORS.NAVY[0], COLORS.NAVY[1], COLORS.NAVY[2]);
-              doc.text(`${pcsVal} PCS / CTN`, col1X, valY);
+              // Left Column: سعر الكرتونة (Carton Price in EGP - جنيه مصري)
+              const leftColCenter = cellX + (colWidth * 0.25);
+              drawArabicCanvasText(doc, 'سعر الكرتونة', leftColCenter, tableDividerY + 3.2, 36, 4.8, COLORS.GRAY, 'center', 'normal');
 
-              // Column 2: Carton Price
-              doc.setFont('helvetica', 'bold');
-              doc.setFontSize(4.5);
-              doc.setTextColor(COLORS.GRAY[0], COLORS.GRAY[1], COLORS.GRAY[2]);
-              doc.text('CARTON PRICE', col2X, labelY);
-
-              doc.setFont('helvetica', 'bold');
-              doc.setFontSize(7.2);
-              doc.setTextColor(COLORS.NAVY[0], COLORS.NAVY[1], COLORS.NAVY[2]);
               const hasPrice = (product.cartonPrice != null && product.cartonPrice !== '' && !isNaN(product.cartonPrice));
-              const priceVal = hasPrice ? `$ ${Number(product.cartonPrice).toFixed(2)}` : '—';
-              doc.text(priceVal, col2X, valY);
+              if (hasPrice) {
+                const numPrice = Number(product.cartonPrice);
+                const formattedNum = (numPrice % 1 === 0)
+                  ? numPrice.toLocaleString('en-US')
+                  : numPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                drawArabicCanvasText(doc, `${formattedNum} ج.م`, leftColCenter, tableDividerY + 7.2, 38, 7.2, COLORS.NAVY, 'center', 'bold');
+              } else {
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(7.2);
+                doc.setTextColor(COLORS.NAVY[0], COLORS.NAVY[1], COLORS.NAVY[2]);
+                doc.text('—', leftColCenter, tableDividerY + 7.2, { align: 'center' });
+              }
 
             } else {
-              // 1 Column: PACKAGING only (Material and Flow rate removed)
-              const col1X = cellX + 4;
-
-              doc.setFont('helvetica', 'bold');
-              doc.setFontSize(4.5);
-              doc.setTextColor(COLORS.GRAY[0], COLORS.GRAY[1], COLORS.GRAY[2]);
-              doc.text('PACKAGING', col1X, labelY);
-
-              doc.setFont('helvetica', 'bold');
-              doc.setFontSize(6.8);
-              doc.setTextColor(COLORS.NAVY[0], COLORS.NAVY[1], COLORS.NAVY[2]);
-              doc.text(`${pcsVal} PCS / CTN`, col1X, valY);
+              // 1 Column Centered: التعبئة فقط
+              const centerCol = cellX + colWidth / 2;
+              drawArabicCanvasText(doc, 'التعبئة', centerCol, tableDividerY + 3.2, 50, 4.8, COLORS.GRAY, 'center', 'normal');
+              drawArabicCanvasText(doc, `${pcsVal} قطعة في الكرتونة`, centerCol, tableDividerY + 7.2, 60, 7.2, COLORS.NAVY, 'center', 'bold');
             }
           }
 
