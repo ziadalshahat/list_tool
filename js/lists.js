@@ -104,6 +104,11 @@
   let currentListName = '';
   /** @type {Set<number>} */
   let currentSelectedProductIds = new Set();
+  /** @type {number[]} */
+  let currentOrderedProductIds = [];
+  /** @type {string[]} */
+  let currentCategoryOrder = [];
+  let currentGroupByCategories = true;
   let availableCompanyProducts = [];
   let isInitialized = false;
 
@@ -175,16 +180,57 @@
         });
       }
 
-      // 4. Step 2: Product Selection Modal controls
+      // 4. Step 2: Product Selection Modal controls & Tab Switcher
+      const tabBtnSelect = document.getElementById('tab-btn-select-products');
+      const tabBtnReorder = document.getElementById('tab-btn-reorder-products');
+      const selectPanel = document.getElementById('list-tab-select-panel');
+      const reorderPanel = document.getElementById('list-tab-reorder-panel');
+
+      if (tabBtnSelect && tabBtnReorder) {
+        tabBtnSelect.addEventListener('click', () => {
+          tabBtnSelect.style.background = 'var(--accent)';
+          tabBtnSelect.style.color = '#fff';
+          tabBtnReorder.style.background = 'transparent';
+          tabBtnReorder.style.color = 'var(--text-secondary)';
+          if (selectPanel) selectPanel.style.display = 'block';
+          if (reorderPanel) reorderPanel.style.display = 'none';
+        });
+
+        tabBtnReorder.addEventListener('click', () => {
+          tabBtnReorder.style.background = 'var(--accent)';
+          tabBtnReorder.style.color = '#fff';
+          tabBtnSelect.style.background = 'transparent';
+          tabBtnSelect.style.color = 'var(--text-secondary)';
+          if (selectPanel) selectPanel.style.display = 'none';
+          if (reorderPanel) {
+            reorderPanel.style.display = 'block';
+            Lists._renderReorderingPanel();
+          }
+        });
+      }
+
+      const groupByCatCheckbox = document.getElementById('list-group-by-category-checkbox');
+      if (groupByCatCheckbox) {
+        groupByCatCheckbox.addEventListener('change', (e) => {
+          currentGroupByCategories = e.target.checked;
+          const catOrderSec = document.getElementById('list-category-order-section');
+          if (catOrderSec) {
+            catOrderSec.style.opacity = currentGroupByCategories ? '1' : '0.4';
+            catOrderSec.style.pointerEvents = currentGroupByCategories ? 'auto' : 'none';
+          }
+        });
+      }
+
       const btnSaveSelection = document.getElementById('btn-save-list-selection');
       const btnCancelSelection = document.getElementById('btn-cancel-list-selection');
       const searchInput = document.getElementById('list-product-search');
+      const catFilter = document.getElementById('list-category-filter');
       const selectGrid = document.getElementById('list-select-grid');
 
       if (btnSaveSelection) {
         btnSaveSelection.addEventListener('click', (e) => {
           e.preventDefault();
-          Lists.saveList(currentListId, currentListName, Array.from(currentSelectedProductIds));
+          Lists.saveList(currentListId, currentListName, currentOrderedProductIds, currentCategoryOrder, currentGroupByCategories);
         });
       }
 
@@ -196,13 +242,19 @@
       }
 
       if (searchInput) {
-        searchInput.addEventListener('input', (e) => {
-          Lists._filterProductSelection(e.target.value);
+        searchInput.addEventListener('input', () => {
+          Lists._filterProductSelection();
+        });
+      }
+
+      if (catFilter) {
+        catFilter.addEventListener('change', () => {
+          Lists._filterProductSelection();
         });
       }
 
       if (selectGrid) {
-        // Handle checkbox toggles and card clicks
+        // Handle checkbox toggles
         selectGrid.addEventListener('change', (e) => {
           const checkbox = e.target.closest('.list-select-checkbox');
           if (!checkbox) return;
@@ -212,11 +264,85 @@
 
           if (checkbox.checked) {
             currentSelectedProductIds.add(productId);
+            if (!currentOrderedProductIds.includes(productId)) {
+              currentOrderedProductIds.push(productId);
+            }
             if (card) card.classList.add('selected');
           } else {
             currentSelectedProductIds.delete(productId);
+            currentOrderedProductIds = currentOrderedProductIds.filter(id => id !== productId);
             if (card) card.classList.remove('selected');
           }
+        });
+      }
+
+      // Reorder buttons delegation (Move Up, Down, Top, Bottom, Remove, Category Up/Down)
+      const reorderContainer = document.getElementById('list-reorder-items-container');
+      if (reorderContainer) {
+        reorderContainer.addEventListener('click', (e) => {
+          const btn = e.target.closest('button[data-action]');
+          if (!btn) return;
+          const itemEl = btn.closest('[data-product-id]');
+          if (!itemEl) return;
+
+          const productId = Number(itemEl.dataset.productId);
+          const action = btn.dataset.action;
+          const index = currentOrderedProductIds.indexOf(productId);
+          if (index === -1) return;
+
+          if (action === 'top') {
+            currentOrderedProductIds.splice(index, 1);
+            currentOrderedProductIds.unshift(productId);
+          } else if (action === 'bottom') {
+            currentOrderedProductIds.splice(index, 1);
+            currentOrderedProductIds.push(productId);
+          } else if (action === 'up' && index > 0) {
+            const temp = currentOrderedProductIds[index - 1];
+            currentOrderedProductIds[index - 1] = currentOrderedProductIds[index];
+            currentOrderedProductIds[index] = temp;
+          } else if (action === 'down' && index < currentOrderedProductIds.length - 1) {
+            const temp = currentOrderedProductIds[index + 1];
+            currentOrderedProductIds[index + 1] = currentOrderedProductIds[index];
+            currentOrderedProductIds[index] = temp;
+          } else if (action === 'remove') {
+            currentSelectedProductIds.delete(productId);
+            currentOrderedProductIds.splice(index, 1);
+            // Sync checkbox in grid
+            const chk = selectGrid?.querySelector(`input.list-select-checkbox[value="${productId}"]`);
+            if (chk) {
+              chk.checked = false;
+              chk.closest('.list-select-item')?.classList.remove('selected');
+            }
+          }
+
+          Lists._renderReorderingPanel();
+        });
+      }
+
+      const catOrderList = document.getElementById('list-category-order-list');
+      if (catOrderList) {
+        catOrderList.addEventListener('click', (e) => {
+          const btn = e.target.closest('button[data-cat-action]');
+          if (!btn) return;
+          const catItem = btn.closest('[data-cat-name]');
+          if (!catItem) return;
+
+          const catName = catItem.dataset.catName;
+          const action = btn.dataset.catAction;
+          const index = currentCategoryOrder.indexOf(catName);
+          if (index === -1) return;
+
+          if (action === 'up' && index > 0) {
+            const temp = currentCategoryOrder[index - 1];
+            currentCategoryOrder[index - 1] = currentCategoryOrder[index];
+            currentCategoryOrder[index] = temp;
+          } else if (action === 'down' && index < currentCategoryOrder.length - 1) {
+            const temp = currentCategoryOrder[index + 1];
+            currentCategoryOrder[index + 1] = currentCategoryOrder[index];
+            currentCategoryOrder[index] = temp;
+          }
+
+          Lists._renderReorderingPanel();
         });
       }
 
@@ -342,13 +468,16 @@
       currentListId = null;
       currentListName = '';
       currentSelectedProductIds = new Set();
+      currentOrderedProductIds = [];
+      currentCategoryOrder = [];
+      currentGroupByCategories = true;
 
       const modalName = document.getElementById('modal-list-name');
       const titleEl = document.getElementById('modal-list-title');
       const idInput = document.getElementById('input-list-id');
       const nameInput = document.getElementById('input-list-name');
 
-      if (titleEl) titleEl.textContent = 'Create New List';
+      if (titleEl) titleEl.textContent = 'إنشاء قائمة جديدة / Create New List';
       if (idInput) idInput.value = '';
       if (nameInput) nameInput.value = '';
 
@@ -373,14 +502,18 @@
 
         currentListId = list.id;
         currentListName = list.name || '';
-        currentSelectedProductIds = new Set((list.productIds || []).map(Number));
+        const prodIds = (list.productIds || []).map(Number);
+        currentSelectedProductIds = new Set(prodIds);
+        currentOrderedProductIds = [...prodIds];
+        currentCategoryOrder = Array.isArray(list.categoryOrder) ? [...list.categoryOrder] : [];
+        currentGroupByCategories = list.groupByCategories !== false;
 
         const modalName = document.getElementById('modal-list-name');
         const titleEl = document.getElementById('modal-list-title');
         const idInput = document.getElementById('input-list-id');
         const nameInput = document.getElementById('input-list-name');
 
-        if (titleEl) titleEl.textContent = 'Edit List';
+        if (titleEl) titleEl.textContent = 'تعديل القائمة / Edit List';
         if (idInput) idInput.value = list.id;
         if (nameInput) nameInput.value = list.name || '';
 
@@ -408,9 +541,10 @@
       const modalSelect = document.getElementById('modal-list-select');
       const titleEl = document.getElementById('modal-list-select-title');
       const searchInput = document.getElementById('list-product-search');
+      const catFilter = document.getElementById('list-category-filter');
 
       if (titleEl) {
-        titleEl.textContent = `Select Products for "${listName}"`;
+        titleEl.textContent = `اختيار وترتيب المنتجات لـ "${listName}"`;
       }
       if (searchInput) {
         searchInput.value = '';
@@ -418,11 +552,46 @@
 
       currentListId = listId ? Number(listId) : null;
       currentListName = listName;
-      currentSelectedProductIds = new Set(existingProductIds.map(Number));
+      if (existingProductIds && existingProductIds.length > 0) {
+        currentSelectedProductIds = new Set(existingProductIds.map(Number));
+        currentOrderedProductIds = [...existingProductIds.map(Number)];
+      }
+
+      // Reset to Tab 1 (Selection Tab)
+      const tabBtnSelect = document.getElementById('tab-btn-select-products');
+      const tabBtnReorder = document.getElementById('tab-btn-reorder-products');
+      const selectPanel = document.getElementById('list-tab-select-panel');
+      const reorderPanel = document.getElementById('list-tab-reorder-panel');
+      if (tabBtnSelect && tabBtnReorder && selectPanel && reorderPanel) {
+        tabBtnSelect.style.background = 'var(--accent)';
+        tabBtnSelect.style.color = '#fff';
+        tabBtnReorder.style.background = 'transparent';
+        tabBtnReorder.style.color = 'var(--text-secondary)';
+        selectPanel.style.display = 'block';
+        reorderPanel.style.display = 'none';
+      }
+
+      const groupByCatCheckbox = document.getElementById('list-group-by-category-checkbox');
+      if (groupByCatCheckbox) {
+        groupByCatCheckbox.checked = currentGroupByCategories;
+      }
+      const catOrderSec = document.getElementById('list-category-order-section');
+      if (catOrderSec) {
+        catOrderSec.style.opacity = currentGroupByCategories ? '1' : '0.4';
+        catOrderSec.style.pointerEvents = currentGroupByCategories ? 'auto' : 'none';
+      }
 
       try {
         const companyId = getCurrentCompanyId();
         availableCompanyProducts = await window.DB.getProducts(companyId);
+
+        // Populate Category Filter dropdown
+        if (catFilter) {
+          const uniqueCats = Array.from(new Set(availableCompanyProducts.map(p => (p.category || '').trim()).filter(Boolean)));
+          catFilter.innerHTML = '<option value="">كل الأقسام / All Categories</option>' +
+            uniqueCats.map(cat => `<option value="${escapeHtml(cat)}">${escapeHtml(cat)}</option>`).join('');
+          catFilter.value = '';
+        }
 
         Lists._renderProductSelectionGrid(availableCompanyProducts);
         showModal(modalSelect);
@@ -435,7 +604,7 @@
     },
 
     /**
-     * Renders product checkboxes into #list-select-grid.
+     * Renders product checkboxes into #list-select-grid with category badges and styling.
      * @private
      * @param {Array<Object>} products 
      */
@@ -445,8 +614,8 @@
 
       if (!products || products.length === 0) {
         selectGrid.innerHTML = `
-          <div class="empty-selection-notice" style="grid-column: 1 / -1; padding: 30px; text-align: center; color: #9CA3AF;">
-            No products available. Please add products to this company first.
+          <div class="empty-selection-notice" style="grid-column: 1 / -1; padding: 40px; text-align: center; color: #9CA3AF;">
+            لا توجد منتجات مطابقة في هذه الشركة.
           </div>
         `;
         return;
@@ -456,17 +625,23 @@
         const isChecked = currentSelectedProductIds.has(Number(product.id));
         const imgSrc = product.thumbnail || product.image || '';
         const hasPrice = product.cartonPrice !== null && product.cartonPrice !== undefined && product.cartonPrice !== '';
-        const priceText = hasPrice ? `· $${Number(product.cartonPrice).toFixed(2)}` : '';
+        const priceText = hasPrice ? `· ${Number(product.cartonPrice).toFixed(0)} ج.م` : '';
+        const catBadge = product.category ? `<span style="font-size: 11px; background: rgba(182,154,104,0.15); color: #B69A68; padding: 2px 7px; border-radius: 4px; font-weight: 600; margin-inline-start: 6px;">${escapeHtml(product.category)}</span>` : '';
 
         return `
-          <label class="list-select-item ${isChecked ? 'selected' : ''}" data-product-id="${product.id}">
-            <input type="checkbox" class="list-select-checkbox" value="${product.id}" ${isChecked ? 'checked' : ''}>
-            <div class="list-select-thumb">
-              <img src="${imgSrc}" alt="${escapeHtml(product.name)}" loading="lazy">
+          <label class="list-select-item ${isChecked ? 'selected' : ''}" data-product-id="${product.id}" style="display: flex; align-items: center; gap: 12px; padding: 10px; border: 1px solid ${isChecked ? 'var(--accent)' : 'var(--border-color)'}; border-radius: 8px; cursor: pointer; transition: all 0.15s ease;">
+            <input type="checkbox" class="list-select-checkbox" value="${product.id}" ${isChecked ? 'checked' : ''} style="width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer;">
+            <div class="list-select-thumb" style="width: 50px; height: 50px; border-radius: 6px; overflow: hidden; background: #f3f4f6; flex-shrink: 0; display: flex; align-items: center; justify-content: center;">
+              ${imgSrc ? `<img src="${imgSrc}" alt="${escapeHtml(product.name)}" style="width: 100%; height: 100%; object-fit: cover;" loading="lazy">` : `<span style="font-size: 20px;">📦</span>`}
             </div>
-            <div class="list-select-info">
-              <div class="list-select-name" title="${escapeHtml(product.name)}">${escapeHtml(product.name)}</div>
-              <div class="list-select-meta">${product.piecesPerCarton || 0} pcs/ctn ${priceText}</div>
+            <div class="list-select-info" style="flex: 1; min-width: 0;">
+              <div class="list-select-name" title="${escapeHtml(product.name)}" style="font-weight: 600; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center;">
+                <span>${escapeHtml(product.name)}</span>
+                ${catBadge}
+              </div>
+              <div class="list-select-meta" style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">
+                ${product.piecesPerCarton ? `${product.piecesPerCarton} قطعة/كرتونة` : ''} ${priceText}
+              </div>
             </div>
           </label>
         `;
@@ -476,32 +651,137 @@
     },
 
     /**
-     * Filters the product selection grid by search query while preserving selections.
+     * Filters the product selection grid by search query and category while preserving selections.
      * @private
-     * @param {string} query 
      */
-    _filterProductSelection(query) {
-      const q = (query || '').trim().toLowerCase();
-      if (!q) {
-        Lists._renderProductSelectionGrid(availableCompanyProducts);
-        return;
-      }
+    _filterProductSelection() {
+      const searchInput = document.getElementById('list-product-search');
+      const catFilter = document.getElementById('list-category-filter');
+      const q = (searchInput?.value || '').trim().toLowerCase();
+      const selectedCat = (catFilter?.value || '').trim();
 
       const filtered = availableCompanyProducts.filter((p) => {
-        return (p.name || '').toLowerCase().includes(q);
+        const matchesQuery = !q || (p.name || '').toLowerCase().includes(q) || (p.category || '').toLowerCase().includes(q);
+        const matchesCat = !selectedCat || (p.category || '').trim() === selectedCat;
+        return matchesQuery && matchesCat;
       });
 
       Lists._renderProductSelectionGrid(filtered);
     },
 
     /**
-     * Saves list to DB (creates new or updates existing) and refreshes lists grid.
+     * Renders Tab 2: Reordering panel for both Categories order and Product order.
+     * @private
+     */
+    _renderReorderingPanel() {
+      const catOrderList = document.getElementById('list-category-order-list');
+      const itemsContainer = document.getElementById('list-reorder-items-container');
+
+      const productMap = new Map();
+      availableCompanyProducts.forEach(p => productMap.set(Number(p.id), p));
+
+      // 1. Identify selected products
+      const selectedProducts = currentOrderedProductIds
+        .map(id => productMap.get(id))
+        .filter(Boolean);
+
+      // Extract unique categories from selected products
+      const presentCats = Array.from(new Set(
+        selectedProducts.map(p => (p.category || '').trim()).filter(Boolean)
+      ));
+
+      // Synchronize currentCategoryOrder
+      currentCategoryOrder = currentCategoryOrder.filter(cat => presentCats.includes(cat));
+      presentCats.forEach(cat => {
+        if (!currentCategoryOrder.includes(cat)) {
+          currentCategoryOrder.push(cat);
+        }
+      });
+
+      // Render Categories Reorder List
+      if (catOrderList) {
+        if (currentCategoryOrder.length <= 1) {
+          catOrderList.innerHTML = `
+            <div style="padding: 12px; text-align: center; color: var(--text-secondary); font-size: 13px;">
+              ${currentCategoryOrder.length === 0 ? 'لا توجد أقسام للمنتجات المختارة حالياً.' : `قسم واحد متاح: <b>${escapeHtml(currentCategoryOrder[0])}</b>`}
+            </div>
+          `;
+        } else {
+          catOrderList.innerHTML = currentCategoryOrder.map((cat, idx) => `
+            <div data-cat-name="${escapeHtml(cat)}" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 14px; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 6px;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-weight: 700; color: #B69A68; width: 22px;">#${idx + 1}</span>
+                <span style="font-weight: 600; font-size: 14px;">${escapeHtml(cat)}</span>
+              </div>
+              <div style="display: flex; gap: 4px;">
+                <button type="button" data-cat-action="up" ${idx === 0 ? 'disabled style="opacity: 0.3; cursor: not-allowed;"' : ''} class="btn btn-secondary" style="padding: 3px 8px; font-size: 12px;" title="تقديم القسم للأمام">▲ أعلى</button>
+                <button type="button" data-cat-action="down" ${idx === currentCategoryOrder.length - 1 ? 'disabled style="opacity: 0.3; cursor: not-allowed;"' : ''} class="btn btn-secondary" style="padding: 3px 8px; font-size: 12px;" title="تأخير القسم للخلف">▼ أسفل</button>
+              </div>
+            </div>
+          `).join('');
+        }
+      }
+
+      // Render Product Items Reorder List
+      if (itemsContainer) {
+        if (selectedProducts.length === 0) {
+          itemsContainer.innerHTML = `
+            <div style="padding: 30px; text-align: center; color: var(--text-secondary); font-size: 13.5px;">
+              لم يتم اختيار أي منتجات بعد. يرجى العودة لتبويب "اختيار المنتجات" وتحديد الأصناف.
+            </div>
+          `;
+          return;
+        }
+
+        itemsContainer.innerHTML = selectedProducts.map((p, idx) => {
+          const imgSrc = p.thumbnail || p.image || '';
+          const catTag = p.category ? `<span style="font-size: 11px; background: rgba(182,154,104,0.15); color: #B69A68; padding: 2px 7px; border-radius: 4px; font-weight: 600;">${escapeHtml(p.category)}</span>` : '';
+          const hasPrice = p.cartonPrice !== null && p.cartonPrice !== undefined && p.cartonPrice !== '';
+          const priceText = hasPrice ? `· ${Number(p.cartonPrice).toFixed(0)} ج.م` : '';
+
+          return `
+            <div data-product-id="${p.id}" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 8px; gap: 12px;">
+              <div style="display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1;">
+                <span style="font-weight: 700; color: #B69A68; width: 26px; text-align: center; flex-shrink: 0;">#${idx + 1}</span>
+                <div style="width: 44px; height: 44px; border-radius: 6px; overflow: hidden; background: #eee; flex-shrink: 0;">
+                  ${imgSrc ? `<img src="${imgSrc}" alt="${escapeHtml(p.name)}" style="width: 100%; height: 100%; object-fit: cover;">` : `<span style="font-size: 18px; line-height: 44px; display: block; text-align: center;">📦</span>`}
+                </div>
+                <div style="min-width: 0; flex: 1;">
+                  <div style="font-weight: 600; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 6px;">
+                    <span>${escapeHtml(p.name)}</span>
+                    ${catTag}
+                  </div>
+                  <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">
+                    ${p.piecesPerCarton ? `${p.piecesPerCarton} قطعة/كرتونة` : ''} ${priceText}
+                  </div>
+                </div>
+              </div>
+
+              <!-- Reorder Controls: Move to Top, Up, Down, Move to Bottom, Remove -->
+              <div style="display: flex; gap: 4px; flex-shrink: 0;">
+                <button type="button" data-action="top" ${idx === 0 ? 'disabled style="opacity: 0.3; cursor: not-allowed;"' : ''} class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px; font-weight: 600;" title="نقل إلى أول القائمة">⏫ أول القائمة</button>
+                <button type="button" data-action="up" ${idx === 0 ? 'disabled style="opacity: 0.3; cursor: not-allowed;"' : ''} class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px;" title="لأعلى">▲</button>
+                <button type="button" data-action="down" ${idx === selectedProducts.length - 1 ? 'disabled style="opacity: 0.3; cursor: not-allowed;"' : ''} class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px;" title="لأسفل">▼</button>
+                <button type="button" data-action="bottom" ${idx === selectedProducts.length - 1 ? 'disabled style="opacity: 0.3; cursor: not-allowed;"' : ''} class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px; font-weight: 600;" title="نقل إلى آخر القائمة">⏬ آخر القائمة</button>
+                <button type="button" data-action="remove" class="btn btn-danger" style="padding: 4px 8px; font-size: 12px; background: rgba(239, 68, 68, 0.1); color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.2);" title="حذف من القائمة">✕</button>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+    },
+
+    /**
+     * Saves list to DB (creates new or updates existing) with custom ordered product IDs,
+     * category order, and category grouping preference, then refreshes lists grid.
      * @param {number|null} listId 
      * @param {string} name 
      * @param {number[]} selectedProductIds 
+     * @param {string[]} categoryOrder 
+     * @param {boolean} groupByCategories 
      * @returns {Promise<void>}
      */
-    async saveList(listId, name, selectedProductIds) {
+    async saveList(listId, name, selectedProductIds, categoryOrder = [], groupByCategories = true) {
       const cleanName = String(name || '').trim();
       const productIds = Array.isArray(selectedProductIds) ? selectedProductIds.map(Number) : [];
       const companyId = getCurrentCompanyId();
@@ -517,20 +797,24 @@
         if (listId) {
           await window.DB.updateList(listId, {
             name: cleanName,
-            productIds: productIds
+            productIds: productIds,
+            categoryOrder: Array.isArray(categoryOrder) ? categoryOrder : [],
+            groupByCategories: Boolean(groupByCategories)
           });
           if (typeof window.showToast === 'function') {
-            window.showToast('List updated successfully', 'success');
+            window.showToast('تم تحديث القائمة بنجاح / List updated successfully', 'success');
           }
         } else {
           await window.DB.addList({
             companyId: companyId,
             name: cleanName,
             productIds: productIds,
+            categoryOrder: Array.isArray(categoryOrder) ? categoryOrder : [],
+            groupByCategories: Boolean(groupByCategories),
             createdAt: Date.now()
           });
           if (typeof window.showToast === 'function') {
-            window.showToast('List created successfully', 'success');
+            window.showToast('تم إنشاء القائمة بنجاح / List created successfully', 'success');
           }
         }
 

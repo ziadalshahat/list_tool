@@ -194,6 +194,388 @@
     });
   }
 
+  /**
+   * Crops/scales an image from its center to completely cover the target aspect ratio,
+   * eliminating empty margins (CSS object-fit: cover).
+   * @param {string} src - Base64 or URL
+   * @param {number} targetW - Target width in mm
+   * @param {number} targetH - Target height in mm
+   * @returns {Promise<string>} - Base64 JPEG data URL
+   */
+  function getCoverCroppedImage(src, targetW, targetH) {
+    return new Promise((resolve) => {
+      if (!src) return resolve(null);
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        try {
+          const imgW = img.naturalWidth || img.width;
+          const imgH = img.naturalHeight || img.height;
+          if (!imgW || !imgH) return resolve(src);
+
+          const targetRatio = targetW / targetH;
+          const currentRatio = imgW / imgH;
+
+          let cropX = 0;
+          let cropY = 0;
+          let cropW = imgW;
+          let cropH = imgH;
+
+          if (currentRatio > targetRatio) {
+            // Image is wider than container -> crop left and right
+            cropW = imgH * targetRatio;
+            cropX = (imgW - cropW) / 2;
+          } else {
+            // Image is taller than container -> crop top and bottom
+            cropH = imgW / targetRatio;
+            cropY = (imgH - cropH) / 2;
+          }
+
+          const canvas = document.createElement('canvas');
+          const maxDim = 1000;
+          let scale = 1;
+          if (cropW > maxDim || cropH > maxDim) {
+            scale = maxDim / Math.max(cropW, cropH);
+          }
+          canvas.width = Math.max(10, Math.round(cropW * scale));
+          canvas.height = Math.max(10, Math.round(cropH * scale));
+
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, canvas.width, canvas.height);
+
+          resolve(canvas.toDataURL('image/jpeg', 0.92));
+        } catch (e) {
+          console.warn('Canvas cropping failed, using original src:', e);
+          resolve(src);
+        }
+      };
+      img.onerror = () => resolve(src);
+      img.src = src;
+    });
+  }
+
+  /**
+   * Renders Stitch luxury header on first page or compact running header on pages 2+
+   */
+  function renderCatalogHeader(doc, pageNum, totalPages, companyName, companyNameAr, logo, logoDims, tagline, refCode, formattedDate, marginX, pageWidth) {
+    if (pageNum === 1) {
+      let logoW = 14;
+      let logoH = 14;
+
+      if (logo) {
+        const maxLogoW = 30;
+        const maxLogoH = 14;
+        const lRatio = logoDims ? (logoDims.width / logoDims.height) : 2.0;
+        if (lRatio > maxLogoW / maxLogoH) {
+          logoW = maxLogoW;
+          logoH = maxLogoW / lRatio;
+        } else {
+          logoH = maxLogoH;
+          logoW = maxLogoH * lRatio;
+        }
+        try {
+          const lFmt = logo.includes('image/png') ? 'PNG' : 'JPEG';
+          doc.addImage(logo, lFmt, marginX, 10 + (maxLogoH - logoH) / 2, logoW, logoH);
+        } catch (e) {
+          console.warn('Error rendering logo:', e);
+        }
+      } else {
+        doc.setFillColor(COLORS.NAVY[0], COLORS.NAVY[1], COLORS.NAVY[2]);
+        doc.roundedRect(marginX, 10, 14, 14, 2.5, 2.5, 'F');
+        doc.setTextColor(COLORS.GOLD[0], COLORS.GOLD[1], COLORS.GOLD[2]);
+        doc.setFont('times', 'bold');
+        doc.setFontSize(11);
+        const initial = (companyName || 'O').trim().charAt(0).toUpperCase();
+        doc.text(initial, marginX + 7, 18.5, { align: 'center' });
+        logoW = 14;
+      }
+
+      const nameX = marginX + logoW + 5;
+      
+      // English Company Name
+      doc.setFont('times', 'bold');
+      doc.setFontSize(12);
+      doc.setTextColor(COLORS.NAVY[0], COLORS.NAVY[1], COLORS.NAVY[2]);
+      doc.text(companyName.toUpperCase(), nameX, 15.2);
+
+      // Arabic Company Name in Champagne Gold
+      if (companyNameAr) {
+        drawArabicCanvasText(doc, companyNameAr, nameX, 19.8, 80, 9.5, COLORS.GOLD, 'left');
+      }
+
+      // Company Subtitle
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(5.4);
+      doc.setTextColor(COLORS.GRAY[0], COLORS.GRAY[1], COLORS.GRAY[2]);
+      const subtitleY = companyNameAr ? 24 : 20.5;
+      doc.text(tagline.toUpperCase(), nameX, subtitleY);
+
+      // Right Header Block
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7);
+      doc.setTextColor(COLORS.GOLD[0], COLORS.GOLD[1], COLORS.GOLD[2]);
+      doc.text('P R O D U C T   C O L L E C T I O N', pageWidth - marginX, 14, { align: 'right' });
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8.5);
+      doc.setTextColor(COLORS.NAVY[0], COLORS.NAVY[1], COLORS.NAVY[2]);
+      doc.text('Professional Product Selection', pageWidth - marginX, 18.5, { align: 'right' });
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(5.8);
+      doc.setTextColor(COLORS.GRAY[0], COLORS.GRAY[1], COLORS.GRAY[2]);
+      doc.text(`DATE OF ISSUE • ${formattedDate.toUpperCase()} • ${refCode}`, pageWidth - marginX, 22.5, { align: 'right' });
+
+      // Gold divider with central heraldic rhombus ornament at Y = 26.5mm
+      drawStitchDivider(doc, marginX, pageWidth - marginX, 26.5, 1.8);
+
+    } else {
+      // Running Header (Pages 2+) - Bilingual
+      let logoW = 9;
+      if (logo) {
+        try {
+          const lFmt = logo.includes('image/png') ? 'PNG' : 'JPEG';
+          doc.addImage(logo, lFmt, marginX, 8, 9, 9);
+        } catch (e) {}
+      } else {
+        doc.setFillColor(COLORS.NAVY[0], COLORS.NAVY[1], COLORS.NAVY[2]);
+        doc.roundedRect(marginX, 8, 9, 9, 1.5, 1.5, 'F');
+        doc.setTextColor(COLORS.GOLD[0], COLORS.GOLD[1], COLORS.GOLD[2]);
+        doc.setFont('times', 'bold');
+        doc.setFontSize(7.5);
+        const initial = (companyName || 'O').trim().charAt(0).toUpperCase();
+        doc.text(initial, marginX + 4.5, 13.8, { align: 'center' });
+      }
+
+      const nameX = marginX + logoW + 4;
+      doc.setFont('times', 'bold');
+      doc.setFontSize(8.5);
+      doc.setTextColor(COLORS.NAVY[0], COLORS.NAVY[1], COLORS.NAVY[2]);
+      doc.text(companyName.toUpperCase(), nameX, 13.5);
+
+      if (companyNameAr) {
+        const enW = doc.getTextWidth(companyName.toUpperCase());
+        drawArabicCanvasText(doc, companyNameAr, nameX + enW + 4, 13.5, 50, 8, COLORS.GOLD, 'left');
+      }
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(6.2);
+      doc.setTextColor(COLORS.GRAY[0], COLORS.GRAY[1], COLORS.GRAY[2]);
+      doc.text(`CATALOG SPECIFICATIONS • ${refCode}`, 130, 13.5, { align: 'center' });
+      doc.text(formattedDate.toUpperCase(), pageWidth - marginX, 13.5, { align: 'right' });
+
+      // Running divider
+      drawStitchDivider(doc, marginX, pageWidth - marginX, 19, 1.4);
+    }
+  }
+
+  /**
+   * Renders Stitch luxury footer with dynamic company profile and accurate page numbering
+   */
+  function renderCatalogFooter(doc, pageNum, totalPages, companyName, address, email, phone, marginX, pageWidth) {
+    const footerY = 280;
+
+    // Left: Company Name & Address from Settings
+    const footerCompanyName = companyName.toUpperCase();
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.2);
+    doc.setTextColor(COLORS.NAVY[0], COLORS.NAVY[1], COLORS.NAVY[2]);
+    doc.text(footerCompanyName, marginX, footerY + 2.8, { maxWidth: 36 });
+
+    if (address) {
+      if (isArabic(address)) {
+        drawArabicCanvasText(doc, address, marginX, footerY + 6.5, 36, 5.5, COLORS.GRAY, 'left');
+      } else {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(5.5);
+        doc.setTextColor(COLORS.GRAY[0], COLORS.GRAY[1], COLORS.GRAY[2]);
+        doc.text(address.toUpperCase(), marginX, footerY + 6.5, { maxWidth: 36 });
+      }
+    }
+
+    // Vertical divider line
+    doc.setDrawColor(COLORS.CARD_BORDER[0], COLORS.CARD_BORDER[1], COLORS.CARD_BORDER[2]);
+    doc.setLineWidth(0.25);
+    doc.line(marginX + 38, footerY, marginX + 38, footerY + 8.5);
+
+    // Email & Phone from Settings
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(5.6);
+    doc.setTextColor(COLORS.GRAY[0], COLORS.GRAY[1], COLORS.GRAY[2]);
+    doc.text(email.toUpperCase(), marginX + 41, footerY + 3.2);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(5.6);
+    doc.setTextColor(COLORS.GRAY[0], COLORS.GRAY[1], COLORS.GRAY[2]);
+    doc.text(phone, marginX + 41, footerY + 6.8);
+
+    // Corporate notice (Center-Right)
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(5.2);
+    doc.setTextColor(COLORS.GRAY[0], COLORS.GRAY[1], COLORS.GRAY[2]);
+    doc.text('CONFIDENTIAL • SPECIFICATION', 132, footerY + 3.2);
+    doc.text('CATALOGUE', 132, footerY + 6.8);
+
+    // Far Right: Page Number Box
+    const pageBoxW = 18;
+    const pageBoxH = 8.5;
+    const pageBoxX = pageWidth - marginX - pageBoxW;
+    const pageBoxY = footerY;
+
+    doc.setFillColor(255, 255, 255);
+    doc.setDrawColor(COLORS.CARD_BORDER[0], COLORS.CARD_BORDER[1], COLORS.CARD_BORDER[2]);
+    doc.setLineWidth(0.25);
+    doc.roundedRect(pageBoxX, pageBoxY, pageBoxW, pageBoxH, 1, 1, 'FD');
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(5);
+    doc.setTextColor(COLORS.GRAY[0], COLORS.GRAY[1], COLORS.GRAY[2]);
+    doc.text(`PAGE ${pageNum} OF`, pageBoxX + pageBoxW / 2, pageBoxY + 3.2, { align: 'center' });
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(COLORS.NAVY[0], COLORS.NAVY[1], COLORS.NAVY[2]);
+    doc.text(String(totalPages), pageBoxX + pageBoxW / 2, pageBoxY + 7.2, { align: 'center' });
+  }
+
+  /**
+   * Renders a single Stitch product card with optional full cover image and specifications
+   */
+  function renderProductCard(doc, product, globalIndex, cellX, cellY, colWidth, rowHeight, includePrices, imageCover, processedImageMap, imageDimensionsMap) {
+    // Subtle luxury Card Container (Very soft Ivory fill, subtle gold border)
+    doc.setFillColor(COLORS.CARD_BG[0], COLORS.CARD_BG[1], COLORS.CARD_BG[2]);
+    doc.setDrawColor(COLORS.CARD_BORDER[0], COLORS.CARD_BORDER[1], COLORS.CARD_BORDER[2]);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(cellX, cellY, colWidth, rowHeight, 2, 2, 'FD');
+
+    // Product Image Container - Fills the majority of the card
+    const imgBoxX = cellX + 1.8;
+    const imgBoxY = cellY + 1.8;
+    const imgBoxW = colWidth - 3.6; // 82.4mm wide
+    const imgBoxHeight = 37.2; // 37.2mm high (covers ~64% of card)
+
+    doc.setFillColor(255, 255, 255);
+    doc.setDrawColor(COLORS.HAIRLINE[0], COLORS.HAIRLINE[1], COLORS.HAIRLINE[2]);
+    doc.setLineWidth(0.15);
+    doc.roundedRect(imgBoxX, imgBoxY, imgBoxW, imgBoxHeight, 1.2, 1.2, 'FD');
+
+    const imgSrc = processedImageMap.get(product.id) || product.image || product.thumbnail;
+    if (imgSrc) {
+      try {
+        if (imageCover) {
+          // Direct fill since it has been cropped to exact ratio!
+          doc.addImage(imgSrc, 'JPEG', imgBoxX, imgBoxY, imgBoxW, imgBoxHeight);
+        } else {
+          // Contain fallback
+          const maxW = imgBoxW - 1.2;
+          const maxH = imgBoxHeight - 1.2;
+          const dims = imageDimensionsMap.get(product.id) || { width: 1, height: 1 };
+          const ratio = dims.width / dims.height;
+          let drawW = maxW;
+          let drawH = maxH;
+          if (ratio > maxW / maxH) {
+            drawW = maxW;
+            drawH = maxW / ratio;
+          } else {
+            drawH = maxH;
+            drawW = maxH * ratio;
+          }
+          const imgX = imgBoxX + (imgBoxW - drawW) / 2;
+          const imgY = imgBoxY + (imgBoxHeight - drawH) / 2;
+          const fmt = imgSrc.includes('image/png') ? 'PNG' : 'JPEG';
+          doc.addImage(imgSrc, fmt, imgX, imgY, drawW, drawH);
+        }
+      } catch (e) {
+        console.warn('Could not render image:', e);
+      }
+    } else {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(6);
+      doc.setTextColor(COLORS.LIGHT_GRAY[0], COLORS.LIGHT_GRAY[1], COLORS.LIGHT_GRAY[2]);
+      doc.text('NO IMAGE AVAILABLE', imgBoxX + imgBoxW / 2, imgBoxY + imgBoxHeight / 2 + 1.2, { align: 'center' });
+    }
+
+    // Border around image container
+    doc.setDrawColor(COLORS.HAIRLINE[0], COLORS.HAIRLINE[1], COLORS.HAIRLINE[2]);
+    doc.setLineWidth(0.2);
+    doc.roundedRect(imgBoxX, imgBoxY, imgBoxW, imgBoxHeight, 1.2, 1.2, 'D');
+
+    // Discreet Corner Badge: N° 01 in Champagne Gold
+    const pillW = 9.5;
+    const pillH = 3.6;
+    const pillX = cellX + colWidth - 2.5 - pillW;
+    const pillY = cellY + 2.5;
+    doc.setDrawColor(COLORS.GOLD[0], COLORS.GOLD[1], COLORS.GOLD[2]);
+    doc.setLineWidth(0.2);
+    doc.setFillColor(255, 255, 255);
+    doc.roundedRect(pillX, pillY, pillW, pillH, 0.8, 0.8, 'FD');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(5);
+    doc.setTextColor(COLORS.GOLD[0], COLORS.GOLD[1], COLORS.GOLD[2]);
+    doc.text(`N° ${String(globalIndex + 1).padStart(2, '0')}`, pillX + pillW / 2, pillY + 2.5, { align: 'center' });
+
+    // Title & Identity Block (Below Image - Centered & Refined)
+    const nameY = cellY + 42.8;
+    const prodName = product.name || 'منتج بدون اسم';
+    const nameIsArabic = isArabic(prodName);
+    const centerX = cellX + colWidth / 2;
+
+    if (nameIsArabic) {
+      drawArabicCanvasText(doc, prodName, centerX, nameY, colWidth - 5, 8.5, COLORS.NAVY, 'center', 'bold');
+    } else {
+      doc.setFont('times', 'bold');
+      doc.setFontSize(8.5);
+      doc.setTextColor(COLORS.NAVY[0], COLORS.NAVY[1], COLORS.NAVY[2]);
+      doc.text(prodName, centerX, nameY, { align: 'center', maxWidth: colWidth - 5 });
+    }
+
+    // Bottom Specification Section (Arabic Packaging & EGP Price)
+    const tableDividerY = cellY + 47.8;
+    doc.setDrawColor(COLORS.HAIRLINE[0], COLORS.HAIRLINE[1], COLORS.HAIRLINE[2]);
+    doc.setLineWidth(0.2);
+    doc.line(cellX + 3, tableDividerY, cellX + colWidth - 3, tableDividerY);
+
+    const pcsVal = (product.piecesPerCarton != null && product.piecesPerCarton !== '') ? product.piecesPerCarton : 1;
+
+    if (includePrices) {
+      // Subtle vertical separator between Packaging (right) and Price (left)
+      const midX = cellX + colWidth / 2;
+      doc.line(midX, tableDividerY + 1.5, midX, cellY + rowHeight - 2);
+
+      // Right Column: التعبئة (Packaging)
+      const rightColCenter = cellX + (colWidth * 0.75);
+      drawArabicCanvasText(doc, 'التعبئة', rightColCenter, tableDividerY + 3.2, 36, 4.8, COLORS.GRAY, 'center', 'normal');
+      drawArabicCanvasText(doc, `${pcsVal} قطعة / كرتونة`, rightColCenter, tableDividerY + 7.2, 38, 6.2, COLORS.NAVY, 'center', 'bold');
+
+      // Left Column: سعر الكرتونة (Carton Price in EGP - جنيه مصري)
+      const leftColCenter = cellX + (colWidth * 0.25);
+      drawArabicCanvasText(doc, 'سعر الكرتونة', leftColCenter, tableDividerY + 3.2, 36, 4.8, COLORS.GRAY, 'center', 'normal');
+
+      const hasPrice = (product.cartonPrice != null && product.cartonPrice !== '' && !isNaN(product.cartonPrice));
+      if (hasPrice) {
+        const numPrice = Number(product.cartonPrice);
+        const formattedNum = (numPrice % 1 === 0)
+          ? numPrice.toLocaleString('en-US')
+          : numPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        drawArabicCanvasText(doc, `${formattedNum} ج.م`, leftColCenter, tableDividerY + 7.2, 38, 7.2, COLORS.NAVY, 'center', 'bold');
+      } else {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.2);
+        doc.setTextColor(COLORS.NAVY[0], COLORS.NAVY[1], COLORS.NAVY[2]);
+        doc.text('—', leftColCenter, tableDividerY + 7.2, { align: 'center' });
+      }
+
+    } else {
+      // 1 Column Centered: التعبئة فقط
+      const centerCol = cellX + colWidth / 2;
+      drawArabicCanvasText(doc, 'التعبئة', centerCol, tableDividerY + 3.2, 50, 4.8, COLORS.GRAY, 'center', 'normal');
+      drawArabicCanvasText(doc, `${pcsVal} قطعة في الكرتونة`, centerCol, tableDividerY + 7.2, 60, 7.2, COLORS.NAVY, 'center', 'bold');
+    }
+  }
+
   window.PDF = {
     activeTab: 'list', // 'list' | 'manual'
     selectedManualProductIds: new Set(),
@@ -388,6 +770,7 @@
 
       if (!listId) {
         this.currentSelectedProducts = [];
+        this.currentList = null;
         this.updateSelectedCount();
         return;
       }
@@ -396,18 +779,31 @@
         const list = await window.DB.getList(parseInt(listId, 10));
         if (!list || !Array.isArray(list.productIds)) {
           this.currentSelectedProducts = [];
+          this.currentList = null;
           this.updateSelectedCount();
           return;
         }
 
+        this.currentList = list;
         const companyId = window.App?.currentCompanyId || 1;
         const allProducts = await window.DB.getProducts(companyId);
-        const idSet = new Set(list.productIds.map((id) => Number(id)));
+        const productMap = new Map();
+        allProducts.forEach(p => productMap.set(Number(p.id), p));
 
-        this.currentSelectedProducts = allProducts.filter((p) => idSet.has(Number(p.id)));
+        // Preserve list.productIds exact ordering
+        this.currentSelectedProducts = (list.productIds || [])
+          .map(id => productMap.get(Number(id)))
+          .filter(Boolean);
+
+        // Sync groupByCategories option if present in list
+        const groupCatCheckbox = document.getElementById('pdf-group-categories');
+        if (groupCatCheckbox && list.groupByCategories !== undefined) {
+          groupCatCheckbox.checked = list.groupByCategories !== false;
+        }
       } catch (e) {
         console.error('Error fetching list products:', e);
         this.currentSelectedProducts = [];
+        this.currentList = null;
       }
 
       this.updateSelectedCount();
@@ -494,30 +890,12 @@
         const tagline = settings.tagline || (companyId === 1 ? 'CORPORATE PRODUCT SELECTION • EXECUTIVE SPECIFICATION' : 'ARCHITECTURAL LIVING COLLECTION • LUXURY SPECIFICATION');
         const refCode = settings.ref || (companyId === 1 ? 'REF #OS-884' : 'REF #AL-920');
 
-        // Arabic font loading check (always loaded since packaging and prices are in Arabic)
-        const needsArabic = true;
-        let arabicLoaded = false;
-        if (needsArabic) {
-          arabicLoaded = await loadArabicFont(doc);
-        }
+        // Arabic font loading check
+        await loadArabicFont(doc);
 
         const includePrices = !!document.getElementById('pdf-include-prices')?.checked;
-
-        // Preload image dimensions to ensure aspect ratio calculations
-        const imageDimensionsMap = new Map();
-        for (const product of products) {
-          const src = product.image || product.thumbnail;
-          if (src) {
-            const dims = await getImageDimensions(src);
-            if (dims) imageDimensionsMap.set(product.id, dims);
-          }
-        }
-
-        // Preload logo dimensions if logo exists
-        let logoDims = null;
-        if (logo) {
-          logoDims = await getImageDimensions(logo);
-        }
+        const groupCategories = !!document.getElementById('pdf-group-categories')?.checked;
+        const imageCover = !!document.getElementById('pdf-image-cover')?.checked;
 
         const pageWidth = 210;
         const pageHeight = 297;
@@ -525,6 +903,11 @@
         const printableWidth = pageWidth - marginX * 2; // 180mm
         const colGutter = 8;
         const colWidth = (printableWidth - colGutter) / 2; // 86mm
+        const rowHeight = 58.5;
+        const rowGap = 3.2;
+        const imgBoxW = colWidth - 3.6; // 82.4mm wide
+        const imgBoxHeight = 37.2; // 37.2mm high
+        const footerY = 280;
 
         const formattedDate = new Date().toLocaleDateString('en-US', {
           month: 'long',
@@ -532,347 +915,150 @@
           year: 'numeric',
         });
 
-        // Exactly 8 products per page (4 rows x 2 columns)
-        const productsPerPage = 8;
-        const totalProducts = products.length;
-        const totalPages = Math.max(1, Math.ceil(totalProducts / productsPerPage));
+        // Preload / crop images to ensure 100% card filling without white bars
+        const processedImageMap = new Map();
+        const imageDimensionsMap = new Map();
+        for (const product of products) {
+          const src = product.image || product.thumbnail;
+          if (src) {
+            if (imageCover) {
+              const cropped = await getCoverCroppedImage(src, imgBoxW, imgBoxHeight);
+              processedImageMap.set(product.id, cropped);
+            } else {
+              const dims = await getImageDimensions(src);
+              if (dims) imageDimensionsMap.set(product.id, dims);
+              processedImageMap.set(product.id, src);
+            }
+          }
+        }
 
-        for (let page = 0; page < totalPages; page++) {
-          if (page > 0) {
-            doc.addPage();
+        let logoDims = null;
+        if (logo) {
+          logoDims = await getImageDimensions(logo);
+        }
+
+        // Check if products have categories and grouping is desired
+        const hasCategories = products.some(p => (p.category || '').trim().length > 0);
+        const shouldGroup = groupCategories && hasCategories;
+
+        if (!shouldGroup) {
+          // ==========================================
+          // FLAT LAYOUT: Exactly 8 products per page in user-defined order
+          // ==========================================
+          const productsPerPage = 8;
+          const totalProducts = products.length;
+          const totalPages = Math.max(1, Math.ceil(totalProducts / productsPerPage));
+
+          for (let page = 0; page < totalPages; page++) {
+            if (page > 0) doc.addPage();
+            const isFirstPage = (page === 0);
+            const startY = isFirstPage ? 29.5 : 22.5;
+            const startIndex = page * productsPerPage;
+            const pageProducts = products.slice(startIndex, startIndex + productsPerPage);
+
+            for (let i = 0; i < pageProducts.length; i++) {
+              const product = pageProducts[i];
+              const globalIdx = startIndex + i;
+              const col = i % 2;
+              const row = Math.floor(i / 2);
+              const cellX = marginX + col * (colWidth + colGutter);
+              const cellY = startY + row * (rowHeight + rowGap);
+
+              renderProductCard(doc, product, globalIdx, cellX, cellY, colWidth, rowHeight, includePrices, imageCover, processedImageMap, imageDimensionsMap);
+            }
           }
 
-          const isFirstPage = page === 0;
-          const startIndex = page * productsPerPage;
-          const pageProducts = products.slice(startIndex, startIndex + productsPerPage);
-          const countOnPage = pageProducts.length;
-
-          // Card dimensions: fits exactly 8 cards (4 rows x 2 cols) per page
-          const rowHeight = 58.5;
-          const rowGap = 3.2;
-          const imgBoxHeight = 31;
-          const startY = isFirstPage ? 29.5 : 22.5;
-
+        } else {
           // ==========================================
-          // 1. TOP HEADER SECTION (Stitch Design - Bilingual)
+          // CATEGORY GROUPED LAYOUT: Preserving Category & Item Ordering
           // ==========================================
-          if (isFirstPage) {
-            // Logo / Monogram
-            let logoW = 14;
-            let logoH = 14;
+          const categoryMap = new Map();
+          products.forEach(p => {
+            const cat = (p.category || '').trim();
+            if (!categoryMap.has(cat)) categoryMap.set(cat, []);
+            categoryMap.get(cat).push(p);
+          });
 
-            if (logo) {
-              const maxLogoW = 30;
-              const maxLogoH = 14;
-              const lRatio = logoDims ? (logoDims.width / logoDims.height) : 2.0;
-              if (lRatio > maxLogoW / maxLogoH) {
-                logoW = maxLogoW;
-                logoH = maxLogoW / lRatio;
-              } else {
-                logoH = maxLogoH;
-                logoW = maxLogoH * lRatio;
-              }
-              try {
-                const lFmt = logo.includes('image/png') ? 'PNG' : 'JPEG';
-                doc.addImage(logo, lFmt, marginX, 10 + (maxLogoH - logoH) / 2, logoW, logoH);
-              } catch (e) {
-                console.warn('Error rendering logo:', e);
-              }
-            } else {
-              // Deep Midnight Navy rounded square with first letter in Champagne Gold
-              doc.setFillColor(COLORS.NAVY[0], COLORS.NAVY[1], COLORS.NAVY[2]);
-              doc.roundedRect(marginX, 10, 14, 14, 2.5, 2.5, 'F');
-              doc.setTextColor(COLORS.GOLD[0], COLORS.GOLD[1], COLORS.GOLD[2]);
-              doc.setFont('times', 'bold');
-              doc.setFontSize(11);
-              const initial = (companyName || 'O').trim().charAt(0).toUpperCase();
-              doc.text(initial, marginX + 7, 18.5, { align: 'center' });
-              logoW = 14;
+          let catKeys = [];
+          const configuredOrder = Array.isArray(this.currentList?.categoryOrder) ? this.currentList.categoryOrder : [];
+          configuredOrder.forEach(cat => {
+            if (categoryMap.has(cat) && !catKeys.includes(cat)) {
+              catKeys.push(cat);
             }
-
-            // Company Title Block (Bilingual: English + Arabic)
-            const nameX = marginX + logoW + 5;
-            
-            // English Company Name
-            doc.setFont('times', 'bold');
-            doc.setFontSize(12);
-            doc.setTextColor(COLORS.NAVY[0], COLORS.NAVY[1], COLORS.NAVY[2]);
-            doc.text(companyName.toUpperCase(), nameX, 15.2);
-
-            // Arabic Company Name in Champagne Gold
-            if (companyNameAr) {
-              drawArabicCanvasText(doc, companyNameAr, nameX, 19.8, 80, 9.5, COLORS.GOLD, 'left');
+          });
+          categoryMap.forEach((_, cat) => {
+            if (cat && !catKeys.includes(cat)) {
+              catKeys.push(cat);
             }
-
-            // Company Subtitle
-            doc.setFont('helvetica', 'normal');
-            doc.setFontSize(5.4);
-            doc.setTextColor(COLORS.GRAY[0], COLORS.GRAY[1], COLORS.GRAY[2]);
-            const subtitleY = companyNameAr ? 24 : 20.5;
-            doc.text(tagline.toUpperCase(), nameX, subtitleY);
-
-            // Right Header Block
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(7);
-            doc.setTextColor(COLORS.GOLD[0], COLORS.GOLD[1], COLORS.GOLD[2]);
-            doc.text('P R O D U C T   C O L L E C T I O N', pageWidth - marginX, 14, { align: 'right' });
-
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(8.5);
-            doc.setTextColor(COLORS.NAVY[0], COLORS.NAVY[1], COLORS.NAVY[2]);
-            doc.text('Professional Product Selection', pageWidth - marginX, 18.5, { align: 'right' });
-
-            doc.setFont('helvetica', 'normal');
-            doc.setFontSize(5.8);
-            doc.setTextColor(COLORS.GRAY[0], COLORS.GRAY[1], COLORS.GRAY[2]);
-            doc.text(`DATE OF ISSUE • ${formattedDate.toUpperCase()} • ${refCode}`, pageWidth - marginX, 22.5, { align: 'right' });
-
-            // Gold divider with central heraldic rhombus ornament at Y = 26.5mm
-            drawStitchDivider(doc, marginX, pageWidth - marginX, 26.5, 1.8);
-
-          } else {
-            // Running Header (Pages 2+) - Bilingual
-            let logoW = 9;
-            if (logo) {
-              try {
-                const lFmt = logo.includes('image/png') ? 'PNG' : 'JPEG';
-                doc.addImage(logo, lFmt, marginX, 8, 9, 9);
-              } catch (e) {}
-            } else {
-              doc.setFillColor(COLORS.NAVY[0], COLORS.NAVY[1], COLORS.NAVY[2]);
-              doc.roundedRect(marginX, 8, 9, 9, 1.5, 1.5, 'F');
-              doc.setTextColor(COLORS.GOLD[0], COLORS.GOLD[1], COLORS.GOLD[2]);
-              doc.setFont('times', 'bold');
-              doc.setFontSize(7.5);
-              const initial = (companyName || 'O').trim().charAt(0).toUpperCase();
-              doc.text(initial, marginX + 4.5, 13.8, { align: 'center' });
-            }
-
-            const nameX = marginX + logoW + 4;
-            doc.setFont('times', 'bold');
-            doc.setFontSize(8.5);
-            doc.setTextColor(COLORS.NAVY[0], COLORS.NAVY[1], COLORS.NAVY[2]);
-            doc.text(companyName.toUpperCase(), nameX, 13.5);
-
-            if (companyNameAr) {
-              const enW = doc.getTextWidth(companyName.toUpperCase());
-              drawArabicCanvasText(doc, companyNameAr, nameX + enW + 4, 13.5, 50, 8, COLORS.GOLD, 'left');
-            }
-
-            doc.setFont('helvetica', 'normal');
-            doc.setFontSize(6.2);
-            doc.setTextColor(COLORS.GRAY[0], COLORS.GRAY[1], COLORS.GRAY[2]);
-            doc.text(`CATALOG SPECIFICATIONS • ${refCode}`, 130, 13.5, { align: 'center' });
-            doc.text(formattedDate.toUpperCase(), pageWidth - marginX, 13.5, { align: 'right' });
-
-            // Running divider
-            drawStitchDivider(doc, marginX, pageWidth - marginX, 19, 1.4);
+          });
+          if (categoryMap.has('') && !catKeys.includes('')) {
+            catKeys.push('');
           }
 
-          // ==========================================
-          // 2. PRODUCT CARDS SECTION (Stitch Design - 8 per page)
-          // ==========================================
-          for (let i = 0; i < pageProducts.length; i++) {
-            const product = pageProducts[i];
-            const productGlobalIndex = startIndex + i;
-            const col = i % 2;
-            const row = Math.floor(i / 2);
+          let currentY = 29.5;
+          let colIndex = 0;
+          let rowY = currentY;
+          let globalIdx = 0;
 
-            const cellX = marginX + col * (colWidth + colGutter);
-            const cellY = startY + row * (rowHeight + rowGap);
+          for (const catName of catKeys) {
+            const catProducts = categoryMap.get(catName) || [];
+            if (catProducts.length === 0) continue;
 
-            // Card Outer Frame (Delicate hairline border on pure white)
-            doc.setFillColor(COLORS.CARD_BG[0], COLORS.CARD_BG[1], COLORS.CARD_BG[2]);
-            doc.setDrawColor(COLORS.CARD_BORDER[0], COLORS.CARD_BORDER[1], COLORS.CARD_BORDER[2]);
-            doc.setLineWidth(0.25);
-            doc.roundedRect(cellX, cellY, colWidth, rowHeight, 2, 2, 'FD');
+            if (colIndex === 1) {
+              currentY += rowHeight + rowGap;
+              colIndex = 0;
+            }
 
-            // Product Image Container - Fills the majority of the card
-            const imgBoxX = cellX + 1.8;
-            const imgBoxY = cellY + 1.8;
-            const imgBoxW = colWidth - 3.6; // 82.4mm wide
-            const imgBoxHeight = 37.2; // 37.2mm high (covers ~64% of card)
+            if (catName) {
+              // Ensure category header + at least 1 card row fits on the page
+              if (currentY + 12 + rowHeight > footerY - 5) {
+                doc.addPage();
+                currentY = 22.5;
+              }
 
-            doc.setFillColor(255, 255, 255);
-            doc.setDrawColor(COLORS.HAIRLINE[0], COLORS.HAIRLINE[1], COLORS.HAIRLINE[2]);
-            doc.setLineWidth(0.15);
-            doc.roundedRect(imgBoxX, imgBoxY, imgBoxW, imgBoxHeight, 1.2, 1.2, 'FD');
+              // Luxury Category Banner
+              doc.setFillColor(248, 246, 241);
+              doc.roundedRect(marginX, currentY, printableWidth, 7.5, 1.2, 1.2, 'F');
+              doc.setDrawColor(COLORS.GOLD[0], COLORS.GOLD[1], COLORS.GOLD[2]);
+              doc.setLineWidth(0.25);
+              doc.line(marginX + 8, currentY + 3.75, marginX + 38, currentY + 3.75);
+              doc.line(marginX + printableWidth - 38, currentY + 3.75, marginX + printableWidth - 8, currentY + 3.75);
+              drawArabicCanvasText(doc, catName, marginX + printableWidth / 2, currentY + 4.9, printableWidth - 80, 7.5, COLORS.NAVY, 'center', 'bold');
+              currentY += 10.5;
+            }
 
-            // Centered Product Image - Maximized to fill the container cleanly
-            const imgSrc = product.image || product.thumbnail;
-            if (imgSrc) {
-              try {
-                const maxW = imgBoxW - 1.2;
-                const maxH = imgBoxHeight - 1.2;
-                const dims = imageDimensionsMap.get(product.id) || { width: 1, height: 1 };
-                const ratio = dims.width / dims.height;
-                let drawW = maxW;
-                let drawH = maxH;
-                if (ratio > maxW / maxH) {
-                  drawW = maxW;
-                  drawH = maxW / ratio;
-                } else {
-                  drawH = maxH;
-                  drawW = maxH * ratio;
+            for (const product of catProducts) {
+              if (colIndex === 0) {
+                if (currentY + rowHeight > footerY - 5) {
+                  doc.addPage();
+                  currentY = 22.5;
                 }
-                const imgX = imgBoxX + (imgBoxW - drawW) / 2;
-                const imgY = imgBoxY + (imgBoxHeight - drawH) / 2;
-                const fmt = imgSrc.includes('image/png') ? 'PNG' : 'JPEG';
-                doc.addImage(imgSrc, fmt, imgX, imgY, drawW, drawH);
-              } catch (e) {
-                console.warn('Could not render image:', e);
-              }
-            } else {
-              doc.setFont('helvetica', 'normal');
-              doc.setFontSize(6);
-              doc.setTextColor(COLORS.LIGHT_GRAY[0], COLORS.LIGHT_GRAY[1], COLORS.LIGHT_GRAY[2]);
-              doc.text('NO IMAGE AVAILABLE', imgBoxX + imgBoxW / 2, imgBoxY + imgBoxHeight / 2 + 1.2, { align: 'center' });
-            }
-
-            // Discreet Corner Badge: N° 01 in Champagne Gold
-            const pillW = 9.5;
-            const pillH = 3.6;
-            const pillX = cellX + colWidth - 2.5 - pillW;
-            const pillY = cellY + 2.5;
-            doc.setDrawColor(COLORS.GOLD[0], COLORS.GOLD[1], COLORS.GOLD[2]);
-            doc.setLineWidth(0.2);
-            doc.setFillColor(255, 255, 255);
-            doc.roundedRect(pillX, pillY, pillW, pillH, 0.8, 0.8, 'FD');
-
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(5);
-            doc.setTextColor(COLORS.GOLD[0], COLORS.GOLD[1], COLORS.GOLD[2]);
-            doc.text(`N° ${String(productGlobalIndex + 1).padStart(2, '0')}`, pillX + pillW / 2, pillY + 2.5, { align: 'center' });
-
-            // ==========================================
-            // Title & Identity Block (Below Image - Centered & Refined)
-            // ==========================================
-            const nameY = cellY + 42.8;
-            const prodName = product.name || 'منتج بدون اسم';
-            const nameIsArabic = isArabic(prodName);
-            const centerX = cellX + colWidth / 2;
-
-            if (nameIsArabic) {
-              drawArabicCanvasText(doc, prodName, centerX, nameY, colWidth - 5, 8.5, COLORS.NAVY, 'center', 'bold');
-            } else {
-              doc.setFont('times', 'bold');
-              doc.setFontSize(8.5);
-              doc.setTextColor(COLORS.NAVY[0], COLORS.NAVY[1], COLORS.NAVY[2]);
-              doc.text(prodName, centerX, nameY, { align: 'center', maxWidth: colWidth - 5 });
-            }
-
-            // ==========================================
-            // Bottom Specification Section (Arabic Packaging & EGP Price)
-            // ==========================================
-            const tableDividerY = cellY + 47.8;
-            doc.setDrawColor(COLORS.HAIRLINE[0], COLORS.HAIRLINE[1], COLORS.HAIRLINE[2]);
-            doc.setLineWidth(0.2);
-            doc.line(cellX + 3, tableDividerY, cellX + colWidth - 3, tableDividerY);
-
-            const pcsVal = (product.piecesPerCarton != null && product.piecesPerCarton !== '') ? product.piecesPerCarton : 1;
-
-            if (includePrices) {
-              // Subtle vertical separator between Packaging (right) and Price (left)
-              const midX = cellX + colWidth / 2;
-              doc.line(midX, tableDividerY + 1.5, midX, cellY + rowHeight - 2);
-
-              // Right Column: التعبئة (Packaging)
-              const rightColCenter = cellX + (colWidth * 0.75);
-              drawArabicCanvasText(doc, 'التعبئة', rightColCenter, tableDividerY + 3.2, 36, 4.8, COLORS.GRAY, 'center', 'normal');
-              drawArabicCanvasText(doc, `${pcsVal} قطعة / كرتونة`, rightColCenter, tableDividerY + 7.2, 38, 6.2, COLORS.NAVY, 'center', 'bold');
-
-              // Left Column: سعر الكرتونة (Carton Price in EGP - جنيه مصري)
-              const leftColCenter = cellX + (colWidth * 0.25);
-              drawArabicCanvasText(doc, 'سعر الكرتونة', leftColCenter, tableDividerY + 3.2, 36, 4.8, COLORS.GRAY, 'center', 'normal');
-
-              const hasPrice = (product.cartonPrice != null && product.cartonPrice !== '' && !isNaN(product.cartonPrice));
-              if (hasPrice) {
-                const numPrice = Number(product.cartonPrice);
-                const formattedNum = (numPrice % 1 === 0)
-                  ? numPrice.toLocaleString('en-US')
-                  : numPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                drawArabicCanvasText(doc, `${formattedNum} ج.م`, leftColCenter, tableDividerY + 7.2, 38, 7.2, COLORS.NAVY, 'center', 'bold');
+                rowY = currentY;
+                const cellX = marginX;
+                renderProductCard(doc, product, globalIdx++, cellX, rowY, colWidth, rowHeight, includePrices, imageCover, processedImageMap, imageDimensionsMap);
+                colIndex = 1;
               } else {
-                doc.setFont('helvetica', 'bold');
-                doc.setFontSize(7.2);
-                doc.setTextColor(COLORS.NAVY[0], COLORS.NAVY[1], COLORS.NAVY[2]);
-                doc.text('—', leftColCenter, tableDividerY + 7.2, { align: 'center' });
+                const cellX = marginX + colWidth + colGutter;
+                renderProductCard(doc, product, globalIdx++, cellX, rowY, colWidth, rowHeight, includePrices, imageCover, processedImageMap, imageDimensionsMap);
+                currentY += rowHeight + rowGap;
+                colIndex = 0;
               }
-
-            } else {
-              // 1 Column Centered: التعبئة فقط
-              const centerCol = cellX + colWidth / 2;
-              drawArabicCanvasText(doc, 'التعبئة', centerCol, tableDividerY + 3.2, 50, 4.8, COLORS.GRAY, 'center', 'normal');
-              drawArabicCanvasText(doc, `${pcsVal} قطعة في الكرتونة`, centerCol, tableDividerY + 7.2, 60, 7.2, COLORS.NAVY, 'center', 'bold');
             }
-          }
 
-          // ==========================================
-          // 3. FOOTER SECTION (Stitch Design - Dynamic from Company Settings)
-          // ==========================================
-          const footerY = 280;
-
-          // Left: Company Name & Address from Settings
-          const footerCompanyName = companyName.toUpperCase();
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(6.2);
-          doc.setTextColor(COLORS.NAVY[0], COLORS.NAVY[1], COLORS.NAVY[2]);
-          doc.text(footerCompanyName, marginX, footerY + 2.8, { maxWidth: 36 });
-
-          if (address) {
-            if (isArabic(address)) {
-              drawArabicCanvasText(doc, address, marginX, footerY + 6.5, 36, 5.5, COLORS.GRAY, 'left');
-            } else {
-              doc.setFont('helvetica', 'normal');
-              doc.setFontSize(5.5);
-              doc.setTextColor(COLORS.GRAY[0], COLORS.GRAY[1], COLORS.GRAY[2]);
-              doc.text(address.toUpperCase(), marginX, footerY + 6.5, { maxWidth: 36 });
+            if (colIndex === 1) {
+              currentY += rowHeight + rowGap;
+              colIndex = 0;
             }
+            currentY += 2;
           }
+        }
 
-          // Vertical divider line
-          doc.setDrawColor(COLORS.CARD_BORDER[0], COLORS.CARD_BORDER[1], COLORS.CARD_BORDER[2]);
-          doc.setLineWidth(0.25);
-          doc.line(marginX + 38, footerY, marginX + 38, footerY + 8.5);
-
-          // Email & Phone from Settings
-          doc.setFont('helvetica', 'normal');
-          doc.setFontSize(5.6);
-          doc.setTextColor(COLORS.GRAY[0], COLORS.GRAY[1], COLORS.GRAY[2]);
-          doc.text(email.toUpperCase(), marginX + 41, footerY + 3.2);
-
-          doc.setFont('helvetica', 'normal');
-          doc.setFontSize(5.6);
-          doc.setTextColor(COLORS.GRAY[0], COLORS.GRAY[1], COLORS.GRAY[2]);
-          doc.text(phone, marginX + 41, footerY + 6.8);
-
-          // Corporate notice (Center-Right)
-          doc.setFont('helvetica', 'normal');
-          doc.setFontSize(5.2);
-          doc.setTextColor(COLORS.GRAY[0], COLORS.GRAY[1], COLORS.GRAY[2]);
-          doc.text('CONFIDENTIAL • SPECIFICATION', 132, footerY + 3.2);
-          doc.text('CATALOGUE', 132, footerY + 6.8);
-
-          // Far Right: Page Number Box
-          const pageBoxW = 18;
-          const pageBoxH = 8.5;
-          const pageBoxX = pageWidth - marginX - pageBoxW;
-          const pageBoxY = footerY;
-
-          doc.setFillColor(255, 255, 255);
-          doc.setDrawColor(COLORS.CARD_BORDER[0], COLORS.CARD_BORDER[1], COLORS.CARD_BORDER[2]);
-          doc.setLineWidth(0.25);
-          doc.roundedRect(pageBoxX, pageBoxY, pageBoxW, pageBoxH, 1, 1, 'FD');
-
-          doc.setFont('helvetica', 'normal');
-          doc.setFontSize(5);
-          doc.setTextColor(COLORS.GRAY[0], COLORS.GRAY[1], COLORS.GRAY[2]);
-          doc.text(`PAGE ${page + 1} OF`, pageBoxX + pageBoxW / 2, pageBoxY + 3.2, { align: 'center' });
-
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(7.5);
-          doc.setTextColor(COLORS.NAVY[0], COLORS.NAVY[1], COLORS.NAVY[2]);
-          doc.text(String(totalPages), pageBoxX + pageBoxW / 2, pageBoxY + 7.2, { align: 'center' });
+        // Apply dynamic luxury headers and footers to all generated pages with accurate total page count
+        const totalPages = doc.getNumberOfPages();
+        for (let p = 1; p <= totalPages; p++) {
+          doc.setPage(p);
+          renderCatalogHeader(doc, p, totalPages, companyName, companyNameAr, logo, logoDims, tagline, refCode, formattedDate, marginX, pageWidth);
+          renderCatalogFooter(doc, p, totalPages, companyName, address, email, phone, marginX, pageWidth);
         }
 
         // Save doc instance and show preview

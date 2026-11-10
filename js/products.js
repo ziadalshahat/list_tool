@@ -263,14 +263,36 @@
         btnAdd.addEventListener('click', () => Products.openAddModal());
       }
 
-      // 2. Search Input (debounced 300ms)
+      // 2. Search Input & Category Filter
       const searchInput = document.getElementById('product-search-input');
+      const categoryFilter = document.getElementById('product-category-filter');
+
+      function triggerProductFilter() {
+        const query = searchInput ? searchInput.value.trim().toLowerCase() : '';
+        const cat = categoryFilter ? categoryFilter.value.trim() : '';
+
+        let filtered = cachedProducts;
+        if (cat) {
+          filtered = filtered.filter(p => (p.category || '').trim() === cat);
+        }
+        if (query) {
+          filtered = filtered.filter(p => (p.name || '').toLowerCase().includes(query) || (p.category || '').toLowerCase().includes(query));
+        }
+        Products.renderGrid(filtered);
+      }
+
       if (searchInput) {
         searchInput.addEventListener('input', (e) => {
           if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
           searchDebounceTimer = setTimeout(() => {
-            Products.searchProducts(e.target.value);
+            triggerProductFilter();
           }, 300);
+        });
+      }
+
+      if (categoryFilter) {
+        categoryFilter.addEventListener('change', () => {
+          triggerProductFilter();
         });
       }
 
@@ -425,6 +447,38 @@
     },
 
     /**
+     * Updates the categories datalist and category filter select with unique categories.
+     * @private
+     */
+    _updateCategoriesDatalist() {
+      const datalist = document.getElementById('categories-datalist');
+      const filterSelect = document.getElementById('product-category-filter');
+      const listCategoryFilter = document.getElementById('list-category-filter');
+
+      const categories = Array.from(new Set(
+        cachedProducts
+          .map(p => (p.category || '').trim())
+          .filter(Boolean)
+      )).sort((a, b) => a.localeCompare(b, 'ar'));
+
+      if (datalist) {
+        datalist.innerHTML = categories.map(c => `<option value="${escapeHtml(c)}"></option>`).join('');
+      }
+
+      if (filterSelect) {
+        const currentVal = filterSelect.value;
+        filterSelect.innerHTML = `<option value="">All Categories (كل الأقسام)</option>` +
+          categories.map(c => `<option value="${escapeHtml(c)}" ${c === currentVal ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('');
+      }
+
+      if (listCategoryFilter) {
+        const currentVal = listCategoryFilter.value;
+        listCategoryFilter.innerHTML = `<option value="">All Categories (كل الأقسام)</option>` +
+          categories.map(c => `<option value="${escapeHtml(c)}" ${c === currentVal ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('');
+      }
+    },
+
+    /**
      * Loads products for the active company and updates the view.
      * @returns {Promise<void>}
      */
@@ -433,14 +487,22 @@
         const companyId = getCurrentCompanyId();
         cachedProducts = await window.DB.getProducts(companyId);
 
-        const searchInput = document.getElementById('product-search-input');
-        const currentQuery = searchInput ? searchInput.value.trim() : '';
+        Products._updateCategoriesDatalist();
 
-        if (currentQuery) {
-          Products.searchProducts(currentQuery);
-        } else {
-          Products.renderGrid(cachedProducts);
+        const searchInput = document.getElementById('product-search-input');
+        const categoryFilter = document.getElementById('product-category-filter');
+        const currentQuery = searchInput ? searchInput.value.trim().toLowerCase() : '';
+        const currentCategory = categoryFilter ? categoryFilter.value.trim() : '';
+
+        let filtered = cachedProducts;
+        if (currentCategory) {
+          filtered = filtered.filter(p => (p.category || '').trim() === currentCategory);
         }
+        if (currentQuery) {
+          filtered = filtered.filter(p => (p.name || '').toLowerCase().includes(currentQuery) || (p.category || '').toLowerCase().includes(currentQuery));
+        }
+
+        Products.renderGrid(filtered);
       } catch (err) {
         console.error('Failed to load products:', err);
         window.showToast('Failed to load products', 'error');
@@ -473,8 +535,9 @@
 
       const cardsHtml = products.map((product) => {
         const hasPrice = product.cartonPrice !== null && product.cartonPrice !== undefined && product.cartonPrice !== '';
-        const priceDisplay = hasPrice ? `$${Number(product.cartonPrice).toFixed(2)}` : '';
+        const priceDisplay = hasPrice ? `${Number(product.cartonPrice).toFixed(2)} ج.م` : '';
         const imgSrc = product.thumbnail || product.image || '';
+        const categoryBadge = product.category ? `<span class="product-card-category" style="display:inline-block; font-size: 11px; padding: 2px 8px; border-radius: 12px; background: rgba(182, 154, 104, 0.15); color: #B69A68; font-weight: 600; margin-bottom: 6px;">${escapeHtml(product.category)}</span>` : '';
 
         return `
           <div class="product-card" data-product-id="${product.id}">
@@ -482,6 +545,7 @@
               <img src="${imgSrc}" alt="${escapeHtml(product.name)}" loading="lazy">
             </div>
             <div class="product-card-info">
+              ${categoryBadge}
               <h3 class="product-card-name" title="${escapeHtml(product.name)}">${escapeHtml(product.name)}</h3>
               <div class="product-card-details">
                 <span class="detail-item"><span class="detail-label">Pcs/Carton:</span> ${product.piecesPerCarton || 0}</span>
@@ -514,6 +578,7 @@
       const form = document.getElementById('product-form');
       const titleEl = document.getElementById('modal-product-title');
       const idInput = document.getElementById('input-product-id');
+      const categoryInput = document.getElementById('input-product-category');
       const fileInput = document.getElementById('input-product-image');
       const preview = document.getElementById('product-image-preview');
       const dropzone = document.getElementById('product-image-dropzone');
@@ -521,8 +586,11 @@
 
       if (form) form.reset();
       if (idInput) idInput.value = '';
+      if (categoryInput) categoryInput.value = '';
       if (fileInput) fileInput.value = '';
       if (titleEl) titleEl.textContent = 'Add Product';
+
+      Products._updateCategoriesDatalist();
 
       currentProcessedImage = { image: null, thumbnail: null };
 
@@ -558,6 +626,7 @@
         const titleEl = document.getElementById('modal-product-title');
         const idInput = document.getElementById('input-product-id');
         const nameInput = document.getElementById('input-product-name');
+        const categoryInput = document.getElementById('input-product-category');
         const piecesInput = document.getElementById('input-product-pieces');
         const priceInput = document.getElementById('input-product-price');
         const fileInput = document.getElementById('input-product-image');
@@ -565,9 +634,12 @@
         const dropzone = document.getElementById('product-image-dropzone');
         const dropzonePrompt = dropzone ? dropzone.querySelector('.dropzone-prompt, .dropzone-text, p, span') : null;
 
+        Products._updateCategoriesDatalist();
+
         if (titleEl) titleEl.textContent = 'Edit Product';
         if (idInput) idInput.value = product.id;
         if (nameInput) nameInput.value = product.name || '';
+        if (categoryInput) categoryInput.value = product.category || '';
         if (piecesInput) piecesInput.value = product.piecesPerCarton || '';
         if (priceInput) priceInput.value = (product.cartonPrice !== null && product.cartonPrice !== undefined) ? product.cartonPrice : '';
         if (fileInput) fileInput.value = '';
@@ -606,10 +678,12 @@
     async saveProduct() {
       const idInput = document.getElementById('input-product-id');
       const nameInput = document.getElementById('input-product-name');
+      const categoryInput = document.getElementById('input-product-category');
       const piecesInput = document.getElementById('input-product-pieces');
       const priceInput = document.getElementById('input-product-price');
 
       const name = nameInput ? nameInput.value.trim() : '';
+      const category = categoryInput ? categoryInput.value.trim() : '';
       const pieces = piecesInput ? parseInt(piecesInput.value, 10) : 0;
       const priceVal = priceInput ? priceInput.value.trim() : '';
       const cartonPrice = priceVal !== '' && !isNaN(priceVal) ? parseFloat(priceVal) : null;
@@ -639,6 +713,7 @@
           // Update existing
           await window.DB.updateProduct(productId, {
             name,
+            category,
             piecesPerCarton: pieces,
             cartonPrice,
             image: currentProcessedImage.image,
@@ -650,6 +725,7 @@
           await window.DB.addProduct({
             companyId,
             name,
+            category,
             piecesPerCarton: pieces,
             cartonPrice,
             image: currentProcessedImage.image,

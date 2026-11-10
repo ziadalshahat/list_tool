@@ -211,6 +211,7 @@
       const cleanData = {
         companyId: Number(productData.companyId),
         name: String(productData.name || '').trim(),
+        category: String(productData.category || '').trim(),
         image: productData.image || '',
         thumbnail: productData.thumbnail || productData.image || '',
         piecesPerCarton: Number(productData.piecesPerCarton) || 0,
@@ -320,9 +321,12 @@
      */
     async addList(listData) {
       const cleanData = {
+        ...listData,
         companyId: Number(listData.companyId),
         name: String(listData.name || '').trim(),
         productIds: Array.isArray(listData.productIds) ? listData.productIds.map(Number) : [],
+        categoryOrder: Array.isArray(listData.categoryOrder) ? listData.categoryOrder : [],
+        groupByCategories: Boolean(listData.groupByCategories),
         createdAt: Number(listData.createdAt) || Date.now()
       };
 
@@ -361,6 +365,12 @@
         }
         if (updates.productIds !== undefined && Array.isArray(updates.productIds)) {
           merged.productIds = updates.productIds.map(Number);
+        }
+        if (updates.categoryOrder !== undefined && Array.isArray(updates.categoryOrder)) {
+          merged.categoryOrder = updates.categoryOrder;
+        }
+        if (updates.groupByCategories !== undefined) {
+          merged.groupByCategories = Boolean(updates.groupByCategories);
         }
 
         await promisifyRequest(store.put(merged));

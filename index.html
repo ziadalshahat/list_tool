@@ -147,6 +147,9 @@
               </svg>
               <input type="search" id="product-search-input" placeholder="Search products..." autocomplete="off">
             </div>
+            <select id="product-category-filter" class="form-select filter-select" style="max-width: 180px;">
+              <option value="">All Categories (كل الأقسام)</option>
+            </select>
             <button type="button" id="btn-add-product" class="btn btn-primary">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -272,11 +275,23 @@
             </div>
 
             <!-- PDF Options Section -->
-            <div class="pdf-options">
+            <div class="pdf-options" style="display: flex; flex-wrap: wrap; gap: 20px;">
               <label class="toggle-container">
                 <input type="checkbox" id="pdf-include-prices" checked>
                 <span class="toggle-slider"></span>
-                <span class="toggle-label">Include Prices</span>
+                <span class="toggle-label">Include Prices (الأسعار)</span>
+              </label>
+
+              <label class="toggle-container">
+                <input type="checkbox" id="pdf-group-categories" checked>
+                <span class="toggle-slider"></span>
+                <span class="toggle-label">Group by Categories (تقسيم حسب الأقسام)</span>
+              </label>
+
+              <label class="toggle-container">
+                <input type="checkbox" id="pdf-image-cover" checked>
+                <span class="toggle-slider"></span>
+                <span class="toggle-label">Fill Image in Card (ملء الصورة بالكامل)</span>
               </label>
             </div>
 
@@ -498,6 +513,14 @@
             <input type="text" id="input-product-name" class="form-input" placeholder="e.g. Royal Porcelain Mug" required autocomplete="off">
           </div>
 
+          <!-- Product Category -->
+          <div class="form-group">
+            <label for="input-product-category" class="form-label">Category / القسم (Optional)</label>
+            <input type="text" id="input-product-category" class="form-input" list="categories-datalist" placeholder="e.g. سماعات ودش، خلاطات، أطقم حمام..." autocomplete="off">
+            <datalist id="categories-datalist"></datalist>
+            <span class="field-hint">اختر قسماً موجوداً أو اكتب اسماً جديداً لتصنيف المنتج</span>
+          </div>
+
           <!-- Product Image Dropzone -->
           <div class="form-group">
             <label class="form-label">Product Image *</label>
@@ -581,17 +604,55 @@
       </div>
 
       <div class="modal-body">
-        <div class="modal-search">
-          <div class="search-box">
-            <svg class="search-box-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="11" cy="11" r="8"></circle>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-            </svg>
-            <input type="search" id="list-product-search" class="form-input" placeholder="Search products in this list..." autocomplete="off">
-          </div>
+        <!-- List Editor Mode Tabs -->
+        <div class="list-tabs-header" style="display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 10px;">
+          <button type="button" id="tab-btn-select-products" class="tab-btn active" style="padding: 8px 16px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid var(--border); background: var(--accent); color: #fff;">1. Choose Products (اختيار الأصناف)</button>
+          <button type="button" id="tab-btn-reorder-products" class="tab-btn" style="padding: 8px 16px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid var(--border); background: transparent; color: var(--text-secondary);">2. Reorder &amp; Categories (ترتيب القائمة والأقسام)</button>
         </div>
 
-        <div id="list-select-grid" class="cards-grid modal-selection-grid"></div>
+        <!-- Panel 1: Selection Grid -->
+        <div id="list-tab-select-panel">
+          <div class="modal-search" style="display: flex; gap: 12px; align-items: center;">
+            <div class="search-box" style="flex: 1;">
+              <svg class="search-box-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+              <input type="search" id="list-product-search" class="form-input" placeholder="Search products in this list..." autocomplete="off">
+            </div>
+            <select id="list-category-filter" class="form-select" style="max-width: 170px;">
+              <option value="">All Categories</option>
+            </select>
+          </div>
+
+          <div id="list-select-grid" class="cards-grid modal-selection-grid"></div>
+        </div>
+
+        <!-- Panel 2: Reordering Panel -->
+        <div id="list-tab-reorder-panel" class="hidden" style="display: none;">
+          <div style="background: var(--bg-primary); padding: 12px 16px; border-radius: var(--radius-sm); margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+            <span style="font-size: 13px; color: var(--text-secondary); font-weight: 500;">
+              حدد ترتيب ظهور الأصناف والأقسام في الـ PDF (اختر وضع الصنف في أول أو آخر القائمة)
+            </span>
+            <label class="toggle-container" style="font-size: 12px;">
+              <input type="checkbox" id="list-group-by-category-checkbox" checked>
+              <span class="toggle-slider"></span>
+              <span class="toggle-label" style="font-weight: 600;">Group by Category (تقسيم حسب الأقسام)</span>
+            </label>
+          </div>
+
+          <!-- Category Order Section -->
+          <div id="list-category-order-section" style="margin-bottom: 18px;">
+            <h4 style="font-size: 13px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px;">Order of Categories (ترتيب الأقسام):</h4>
+            <div id="list-category-order-list" style="display: flex; flex-direction: column; gap: 6px; max-height: 140px; overflow-y: auto; padding-right: 4px;"></div>
+          </div>
+
+          <!-- Product Order Section -->
+          <div>
+            <h4 style="font-size: 13px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px;">Order of Selected Products (ترتيب الأصناف في القائمة):</h4>
+            <div id="list-reorder-items-container" style="display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow-y: auto; padding-right: 4px;"></div>
+          </div>
+        </div>
       </div>
 
       <div class="modal-footer">
